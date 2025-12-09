@@ -83,7 +83,8 @@ export function parseCSV(csvString) {
     skip_empty_lines: true,  // Skip empty lines
     trim: true,              // Trim whitespace from fields
     relax_quotes: true,      // Be lenient with quotes
-    relax_column_count: true // Allow inconsistent column counts
+    quote: '"',              // Specify quote character
+    escape: '"'              // Specify escape character
   });
 
   return records;
