@@ -450,9 +450,9 @@ app.get('/api/datasets/:id/agents/top', (req, res) => {
     const topAgents = Object.values(agentStats)
       .map(agent => ({
         ...agent,
-        topPropertyType: Object.entries(agent.propertyTypes).sort((a, b) => b[1] - a[1])[0],
-        topTransactionType: Object.entries(agent.transactionTypes).sort((a, b) => b[1] - a[1])[0],
-        topRepresentation: Object.entries(agent.representation).sort((a, b) => b[1] - a[1])[0],
+        topPropertyType: Object.entries(agent.propertyTypes).sort((a, b) => b[1] - a[1])[0] || ['Unknown', 0],
+        topTransactionType: Object.entries(agent.transactionTypes).sort((a, b) => b[1] - a[1])[0] || ['Unknown', 0],
+        topRepresentation: Object.entries(agent.representation).sort((a, b) => b[1] - a[1])[0] || ['Unknown', 0],
         topTown: Object.keys(agent.towns).length > 0
           ? Object.entries(agent.towns).sort((a, b) => b[1] - a[1])[0]
           : null

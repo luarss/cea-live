@@ -146,12 +146,13 @@ export default function AgentInsights({ datasetId }) {
       </div>
 
       {/* Distribution Insights */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* Top 10 Agents Chart */}
-        <div className="card">
-          <h4 className="font-semibold mb-4">Top 10 Agents by Volume</h4>
-          <div className="space-y-3">
-            {agentData.agents.slice(0, 10).map((agent, index) => (
+      {agentData.agents.length > 0 && (
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          {/* Top 10 Agents Chart */}
+          <div className="card">
+            <h4 className="font-semibold mb-4">Top 10 Agents by Volume</h4>
+            <div className="space-y-3">
+              {agentData.agents.slice(0, 10).map((agent, index) => (
               <div key={agent.regNum} className="flex items-center gap-3">
                 <div className="w-8 text-sm font-semibold text-gray-600">#{index + 1}</div>
                 <div className="flex-1">
@@ -201,7 +202,8 @@ export default function AgentInsights({ datasetId }) {
             </div>
           </div>
         </div>
-      </div>
+        </div>
+      )}
     </div>
   );
 }
