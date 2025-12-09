@@ -24,7 +24,6 @@ logs/
 .DS_Store
 Thumbs.db
 
-# Package manager
-package-lock.json
+# Package manager (keep lock files for reproducible builds)
 pnpm-lock.yaml
 yarn.lock
