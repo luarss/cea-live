@@ -1,0 +1,24 @@
+services:
+  - type: web
+    name: cea-viz
+    env: node
+    region: singapore
+    plan: free
+    buildCommand: |
+      # Install backend dependencies
+      cd backend && npm install
+
+      # Install Playwright browsers
+      npx playwright install --with-deps chromium
+
+      # Run data pipeline to generate processed data
+      npm start
+
+      # Install frontend dependencies and build
+      cd ../frontend && npm install && npm run build
+    startCommand: cd backend && npm run server
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: PORT
+        sync: false
