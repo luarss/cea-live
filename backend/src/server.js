@@ -19,6 +19,7 @@ const PORT = process.env.PORT || 3003;
 const ALLOWED_ORIGINS = [
   process.env.FRONTEND_ORIGIN || 'http://localhost:3000',
   'http://localhost:5173', // Vite default dev server
+  'http://localhost:3002', // Vite alternate port
   'http://localhost:3003', // Same origin (backend serving frontend)
 ].filter(Boolean);
 
@@ -444,10 +445,15 @@ app.get('/api/datasets/:id/agents/top', (req, res) => {
     }
     const filteredData = applyFilters(data, parsedFilters);
 
-    // Aggregate by agent
+    // Aggregate by agent (exclude entries with missing/invalid agent info)
     const agentStats = {};
     filteredData.forEach(row => {
       const agentKey = row.salesperson_reg_num;
+
+      // Skip rows where agent information is missing or invalid
+      if (!agentKey || agentKey === '-' || agentKey.trim() === '') {
+        return;
+      }
       if (!agentStats[agentKey]) {
         agentStats[agentKey] = {
           name: row.salesperson_name,
