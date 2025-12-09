@@ -141,7 +141,16 @@ app.get('/api/datasets/:id', (req, res) => {
       return res.status(404).json({ error: 'Dataset not found' });
     }
 
-    res.json(metadata);
+    // Ensure schema is always well-formed with defensive defaults
+    const safeMetadata = {
+      ...metadata,
+      schema: {
+        columns: metadata.schema?.columns || [],
+        temporalColumn: metadata.schema?.temporalColumn || null
+      }
+    };
+
+    res.json(safeMetadata);
   } catch (error) {
     console.error('Error loading dataset metadata:', error);
     res.status(500).json({ error: 'Failed to load dataset metadata' });
