@@ -14,6 +14,9 @@ export async function fetchDataGovSG(resourceId, options = {}) {
     maxRecords = 10000, // Total max records to fetch
   } = options;
 
+  // Validate and normalize maxRetries to minimum of 1
+  const normalizedMaxRetries = Math.max(1, maxRetries);
+
   const baseUrl = 'https://data.gov.sg/api/action/datastore_search';
   let allRecords = [];
   let offset = 0;
@@ -26,10 +29,10 @@ export async function fetchDataGovSG(resourceId, options = {}) {
     let success = false;
     let response;
 
-    while (attempt < maxRetries && !success) {
+    while (attempt < normalizedMaxRetries && !success) {
       attempt++;
       try {
-        console.log(`Fetching batch at offset ${offset} (attempt ${attempt}/${maxRetries})`);
+        console.log(`Fetching batch at offset ${offset} (attempt ${attempt}/${normalizedMaxRetries})`);
 
         response = await axios.get(baseUrl, {
           params: {
@@ -48,12 +51,17 @@ export async function fetchDataGovSG(resourceId, options = {}) {
       } catch (error) {
         console.error(`Attempt ${attempt} failed:`, error.message);
 
-        if (attempt < maxRetries) {
+        if (attempt < normalizedMaxRetries) {
           await new Promise(resolve => setTimeout(resolve, retryDelay * attempt));
         } else {
-          throw new Error(`Failed to fetch data after ${maxRetries} attempts: ${error.message}`);
+          throw new Error(`Failed to fetch data after ${normalizedMaxRetries} attempts: ${error.message}`);
         }
       }
+    }
+
+    // Ensure response is defined before accessing
+    if (!response) {
+      throw new Error('No response received after retry attempts');
     }
 
     const result = response.data.result;
