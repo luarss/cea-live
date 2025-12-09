@@ -12,8 +12,37 @@ const ROOT_DIR = join(__dirname, '..', '..');
 const app = express();
 const PORT = process.env.PORT || 3003;
 
+// CORS Configuration
+// FRONTEND_ORIGIN environment variable can be set to allow specific origins
+// For production deployment on Render, set this to your frontend domain
+// Example: FRONTEND_ORIGIN=https://your-frontend.onrender.com
+const ALLOWED_ORIGINS = [
+  process.env.FRONTEND_ORIGIN || 'http://localhost:3000',
+  'http://localhost:5173', // Vite default dev server
+  'http://localhost:3003', // Same origin (backend serving frontend)
+].filter(Boolean);
+
+const corsOptions = {
+  origin: (origin, callback) => {
+    // Allow requests with no origin (like mobile apps, Postman, or same-origin)
+    if (!origin) {
+      return callback(null, true);
+    }
+
+    if (ALLOWED_ORIGINS.includes(origin)) {
+      callback(null, true);
+    } else {
+      console.warn(`CORS: Blocked request from origin: ${origin}`);
+      callback(new Error('Not allowed by CORS'));
+    }
+  },
+  methods: ['GET', 'POST', 'PUT', 'DELETE'],
+  credentials: true, // Allow cookies and authentication headers
+  optionsSuccessStatus: 200
+};
+
 // Middleware
-app.use(cors());
+app.use(cors(corsOptions));
 app.use(express.json());
 
 // Helper functions for filter parsing and application
