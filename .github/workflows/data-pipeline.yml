@@ -1,0 +1,57 @@
+name: Data Pipeline
+
+on:
+  schedule:
+    - cron: '0 0 * * *'
+  workflow_dispatch:
+  push:
+    paths:
+      - 'data/sources.config.json'
+      - 'backend/**'
+
+jobs:
+  fetch-and-process:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: 'backend/package-lock.json'
+
+      - name: Install pipeline dependencies
+        run: cd backend && npm ci
+
+      - name: Run data pipeline
+        run: cd backend && npm run pipeline
+        env:
+          NODE_ENV: production
+
+      - name: Check for data changes
+        id: git-check
+        run: |
+          git diff --exit-code data/processed || echo "changed=true" >> $GITHUB_OUTPUT
+
+      - name: Commit processed data
+        if: steps.git-check.outputs.changed == 'true'
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add data/processed
+          git commit -m "🤖 Update processed data - $(date -u +'%Y-%m-%d %H:%M:%S UTC')"
+          git push
+
+      - name: Upload pipeline logs on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: pipeline-logs-${{ github.run_id }}
+          path: backend/logs/
+          if-no-files-found: ignore
