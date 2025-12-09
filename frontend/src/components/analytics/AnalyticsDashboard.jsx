@@ -1,14 +1,18 @@
+import { useState } from 'react';
 import { useMarketInsights, useMultiDimensionalAnalytics, useTimeSeriesData } from '../../hooks/useAnalytics';
 import PieChart from '../visualizations/PieChart';
 import BarChart from '../visualizations/BarChart';
 import LineChart from '../visualizations/LineChart';
+import FilterPanel from './FilterPanel';
 
 export default function AnalyticsDashboard({ datasetId }) {
-  const { data: insights, loading: insightsLoading } = useMarketInsights(datasetId);
-  const { data: transactionTypeData } = useMultiDimensionalAnalytics(datasetId, 'transaction_type');
-  const { data: representedData } = useMultiDimensionalAnalytics(datasetId, 'represented');
-  const { data: propertyTypeData } = useMultiDimensionalAnalytics(datasetId, 'property_type');
-  const { data: timeSeriesData } = useTimeSeriesData(datasetId, 'month');
+  const [filters, setFilters] = useState({});
+
+  const { data: insights, loading: insightsLoading } = useMarketInsights(datasetId, filters);
+  const { data: transactionTypeData } = useMultiDimensionalAnalytics(datasetId, 'transaction_type', null, filters);
+  const { data: representedData } = useMultiDimensionalAnalytics(datasetId, 'represented', null, filters);
+  const { data: propertyTypeData } = useMultiDimensionalAnalytics(datasetId, 'property_type', null, filters);
+  const { data: timeSeriesData } = useTimeSeriesData(datasetId, 'month', null, filters);
 
   if (insightsLoading) {
     return (
@@ -50,6 +54,9 @@ export default function AnalyticsDashboard({ datasetId }) {
 
   return (
     <div className="space-y-8">
+      {/* Filter Panel */}
+      <FilterPanel filters={filters} onFiltersChange={setFilters} />
+
       {/* Key Metrics Cards */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
         <div className="card">

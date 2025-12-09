@@ -288,14 +288,33 @@ app.get('/api/datasets/:id/timeseries', (req, res) => {
 app.get('/api/datasets/:id/insights', (req, res) => {
   try {
     const { data } = loadDataset();
+    const { filters } = req.query;
+
+    // Apply filters if provided
+    let filteredData = data;
+    if (filters) {
+      try {
+        const filterObj = JSON.parse(filters);
+        filteredData = data.filter(row => {
+          return Object.entries(filterObj).every(([key, value]) => {
+            if (Array.isArray(value)) {
+              return value.includes(row[key]);
+            }
+            return row[key] === value;
+          });
+        });
+      } catch (error) {
+        return res.status(400).json({ error: 'Invalid filters format' });
+      }
+    }
 
     // Calculate summary statistics
-    const totalTransactions = data.length;
-    const dateRange = getDateRange(data);
+    const totalTransactions = filteredData.length;
+    const dateRange = getDateRange(filteredData);
 
     // Property type distribution
     const propertyTypeCounts = {};
-    data.forEach(row => {
+    filteredData.forEach(row => {
       const type = row.property_type || 'Unknown';
       propertyTypeCounts[type] = (propertyTypeCounts[type] || 0) + 1;
     });
@@ -306,7 +325,7 @@ app.get('/api/datasets/:id/insights', (req, res) => {
 
     // Transaction type distribution
     const transactionTypeCounts = {};
-    data.forEach(row => {
+    filteredData.forEach(row => {
       const type = row.transaction_type || 'Unknown';
       transactionTypeCounts[type] = (transactionTypeCounts[type] || 0) + 1;
     });
@@ -317,7 +336,7 @@ app.get('/api/datasets/:id/insights', (req, res) => {
 
     // Representation distribution
     const representedCounts = {};
-    data.forEach(row => {
+    filteredData.forEach(row => {
       const type = row.represented || 'Unknown';
       representedCounts[type] = (representedCounts[type] || 0) + 1;
     });
@@ -326,12 +345,12 @@ app.get('/api/datasets/:id/insights', (req, res) => {
       .sort((a, b) => b.count - a.count);
 
     // Calculate monthly trends
-    const monthlyData = groupByPeriod(data, 'month');
+    const monthlyData = groupByPeriod(filteredData, 'month');
     const monthlyTotals = Object.values(monthlyData);
     const monthlyAverage = Math.round(monthlyTotals.reduce((sum, val) => sum + val, 0) / monthlyTotals.length);
 
     // Calculate yearly growth (compare last year to previous year)
-    const yearlyData = groupByPeriod(data, 'year');
+    const yearlyData = groupByPeriod(filteredData, 'year');
     const years = sortPeriods(Object.keys(yearlyData));
     let yearlyGrowth = 0;
     if (years.length >= 2) {

@@ -95,9 +95,10 @@ export function useTimeSeriesData(datasetId, period = 'month', groupBy = null, f
 /**
  * Hook for fetching market insights
  * @param {string} datasetId - Dataset ID
+ * @param {Object} filters - Optional filters
  * @returns {Object} { data, loading, error }
  */
-export function useMarketInsights(datasetId) {
+export function useMarketInsights(datasetId, filters = null) {
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -112,7 +113,13 @@ export function useMarketInsights(datasetId) {
     setLoading(true);
     setError(null);
 
-    const url = `${API_BASE_URL}/api/datasets/${datasetId}/insights`;
+    const params = new URLSearchParams();
+    if (filters && Object.keys(filters).some(k => filters[k]?.length > 0)) {
+      params.append('filters', JSON.stringify(filters));
+    }
+
+    const queryString = params.toString();
+    const url = `${API_BASE_URL}/api/datasets/${datasetId}/insights${queryString ? '?' + queryString : ''}`;
 
     axios.get(url)
       .then(response => {
@@ -124,7 +131,7 @@ export function useMarketInsights(datasetId) {
         setError(err.message);
         setLoading(false);
       });
-  }, [datasetId]);
+  }, [datasetId, JSON.stringify(filters)]);
 
   return { data, loading, error };
 }
