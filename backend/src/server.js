@@ -262,23 +262,34 @@ app.get('/api/datasets/:id/analytics', (req, res) => {
 
     // Format results
     let results;
+    let chartData;
+
     if (dimension2) {
       results = Object.entries(counts).map(([key, count]) => {
         const [val1, val2] = key.split('|');
         return { [dimension1]: val1, [dimension2]: val2, count };
       });
+      chartData = results; // For 2D data, return as-is
     } else {
       results = Object.entries(counts).map(([value, count]) => {
         return { [dimension1]: value, count };
       });
+
+      // Create chart-ready format with 'name' and 'value' keys for pie charts
+      chartData = results.map(item => ({
+        name: item[dimension1],
+        value: item.count
+      }));
     }
 
     // Sort by count descending
     results.sort((a, b) => b.count - a.count);
+    chartData.sort((a, b) => (b.value || b.count) - (a.value || a.count));
 
     res.json({
       dimensions: dimension2 ? [dimension1, dimension2] : [dimension1],
       data: results,
+      chartData: chartData, // Chart-ready format
       total: filteredData.length
     });
   } catch (error) {
@@ -317,10 +328,14 @@ app.get('/api/datasets/:id/timeseries', (req, res) => {
       }
     });
 
+    // Create chart-ready data (limit to last 24 months for better visualization)
+    const chartData = series.slice(-24);
+
     res.json({
       period,
       groupBy: groupBy || null,
       series,
+      chartData, // Last 24 periods, ready for charts
       total: filteredData.length
     });
   } catch (error) {
@@ -469,10 +484,31 @@ app.get('/api/datasets/:id/agents/top', (req, res) => {
       .sort((a, b) => b.totalTransactions - a.totalTransactions)
       .slice(0, parseInt(limit));
 
+    // Calculate aggregate statistics
+    const totalTransactions = topAgents.reduce((sum, a) => sum + a.totalTransactions, 0);
+    const averageTransactions = topAgents.length > 0
+      ? (totalTransactions / topAgents.length).toFixed(0)
+      : 0;
+
+    const topAgentMarketShare = topAgents.length > 0 && totalTransactions > 0
+      ? ((topAgents[0].totalTransactions / totalTransactions) * 100).toFixed(1)
+      : '0.0';
+
+    const top10Transactions = topAgents.slice(0, 10).reduce((sum, a) => sum + a.totalTransactions, 0);
+    const top10MarketShare = totalTransactions > 0
+      ? ((top10Transactions / totalTransactions) * 100).toFixed(1)
+      : '0.0';
+
     res.json({
       total: Object.keys(agentStats).length,
       showing: topAgents.length,
-      agents: topAgents
+      agents: topAgents,
+      statistics: {
+        averageTransactions: parseFloat(averageTransactions),
+        topAgentMarketShare: parseFloat(topAgentMarketShare),
+        top10MarketShare: parseFloat(top10MarketShare),
+        totalTransactions
+      }
     });
   } catch (error) {
     console.error('Error calculating top agents:', error);

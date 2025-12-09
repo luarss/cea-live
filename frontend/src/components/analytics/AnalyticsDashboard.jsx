@@ -30,27 +30,14 @@ export default function AnalyticsDashboard({ datasetId }) {
     );
   }
 
-  // Format data for charts
-  const transactionTypeChartData = transactionTypeData?.data?.map(item => ({
-    name: item.transaction_type,
-    value: item.count
-  })) || [];
-
-  const representedChartData = representedData?.data?.map(item => ({
-    name: item.represented,
-    value: item.count
-  })) || [];
-
+  // Use chart-ready data from backend
+  const transactionTypeChartData = transactionTypeData?.chartData || [];
+  const representedChartData = representedData?.chartData || [];
   const propertyTypeChartData = propertyTypeData?.data?.slice(0, 5).map(item => ({
-    name: item.property_type,
+    name: item[propertyTypeData.dimensions[0]],
     count: item.count
   })) || [];
-
-  // Format time series data - limit to last 24 months for readability
-  const timeSeriesChartData = timeSeriesData?.series?.slice(-24).map(item => ({
-    period: item.period,
-    count: item.count
-  })) || [];
+  const timeSeriesChartData = timeSeriesData?.chartData || [];
 
   return (
     <div className="space-y-8">

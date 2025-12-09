@@ -183,21 +183,19 @@ export default function AgentInsights({ datasetId }) {
             <div>
               <div className="text-sm text-gray-500 mb-1">Average Transactions per Agent</div>
               <div className="text-2xl font-bold">
-                {(agentData.agents.reduce((sum, a) => sum + a.totalTransactions, 0) / agentData.showing).toFixed(0)}
+                {agentData.statistics.averageTransactions.toLocaleString()}
               </div>
             </div>
             <div>
               <div className="text-sm text-gray-500 mb-1">Top Agent Market Share</div>
               <div className="text-2xl font-bold text-primary-600">
-                {((agentData.agents[0].totalTransactions /
-                   agentData.agents.reduce((sum, a) => sum + a.totalTransactions, 0)) * 100).toFixed(1)}%
+                {agentData.statistics.topAgentMarketShare}%
               </div>
             </div>
             <div>
               <div className="text-sm text-gray-500 mb-1">Top 10 Combined Market Share</div>
               <div className="text-2xl font-bold text-primary-600">
-                {((agentData.agents.slice(0, 10).reduce((sum, a) => sum + a.totalTransactions, 0) /
-                   agentData.agents.reduce((sum, a) => sum + a.totalTransactions, 0)) * 100).toFixed(1)}%
+                {agentData.statistics.top10MarketShare}%
               </div>
             </div>
           </div>
