@@ -66,58 +66,30 @@ async function processDataset(config) {
 async function main() {
   try {
     logger.log('='.repeat(60));
-    logger.log('CEA-VIZ Data Pipeline');
+    logger.log('CEA Property Transactions Pipeline');
     logger.log('='.repeat(60));
 
-    // Read configuration
-    const configPath = join(ROOT_DIR, 'data', 'sources.config.json');
-    if (!existsSync(configPath)) {
-      throw new Error(`Configuration file not found: ${configPath}`);
-    }
-
-    const config = JSON.parse(readFileSync(configPath, 'utf-8'));
-    logger.log(`Loaded configuration with ${config.datasets.length} dataset(s)`);
-
-    // Process each dataset
-    const results = [];
-    for (const datasetConfig of config.datasets) {
-      if (datasetConfig.refresh?.enabled !== false) {
-        try {
-          const result = await processDataset(datasetConfig);
-          results.push(result);
-        } catch (error) {
-          logger.error(`Skipping dataset ${datasetConfig.id} due to error`);
-          results.push({
-            id: datasetConfig.id,
-            name: datasetConfig.name,
-            error: error.message
-          });
-        }
-      } else {
-        logger.log(`Skipping disabled dataset: ${datasetConfig.id}`);
+    // Hardcoded configuration for CEA data
+    const datasetConfig = {
+      id: 'cea-property-transactions',
+      name: 'CEA Salespersons Property Transaction Records',
+      description: 'Property transaction records from Singapore Council for Estate Agencies',
+      source: {
+        type: 'datagovsg',
+        resourceId: 'd_ee7e46d3c57f7865790704632b0aef71'
+      },
+      processing: {
+        maxRows: 10000
       }
-    }
-
-    // Create catalog file
-    const catalogPath = join(ROOT_DIR, 'data', 'processed', 'datasets.json');
-    const catalog = {
-      version: config.version || '1.0',
-      lastUpdated: new Date().toISOString(),
-      datasets: results.filter(r => !r.error)
     };
 
-    writeFileSync(catalogPath, JSON.stringify(catalog, null, 2));
-    logger.success(`Created dataset catalog: ${catalogPath}`);
+    // Process the dataset
+    const result = await processDataset(datasetConfig);
 
     // Summary
     logger.log('='.repeat(60));
     logger.success(`Pipeline completed successfully`);
-    logger.log(`Processed: ${results.filter(r => !r.error).length}/${results.length} datasets`);
-
-    if (results.some(r => r.error)) {
-      logger.warn('Some datasets failed - check logs above');
-      process.exit(1);
-    }
+    logger.log(`Fetched ${result.metadata.rowCount} records`);
 
   } catch (error) {
     logger.error('Pipeline failed:', error.message);
