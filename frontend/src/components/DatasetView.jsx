@@ -1,6 +1,5 @@
 import React, { useState } from 'react';
 import { format } from 'date-fns';
-import StatsSummary from './analysis/StatsSummary';
 import AnalyticsDashboard from './analytics/AnalyticsDashboard';
 import AgentInsights from './agents/AgentInsights';
 
@@ -53,9 +52,6 @@ export default function DatasetView({ dataset, loading, error }) {
           <span>Updated {lastUpdated}</span>
         </div>
       </div>
-
-      {/* Statistics Summary */}
-      <StatsSummary schema={schema} metadata={metadata} />
 
       {/* Tab Navigation */}
       <div className="border-b border-gray-200">
