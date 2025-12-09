@@ -141,9 +141,10 @@ export function useMarketInsights(datasetId, filters = null) {
  * @param {string} datasetId - Dataset ID
  * @param {number} limit - Number of agents to fetch (default 100)
  * @param {Object} filters - Optional filters
+ * @param {string} search - Optional search query for agent name or reg number
  * @returns {Object} { data, loading, error }
  */
-export function useTopAgents(datasetId, limit = 100, filters = null) {
+export function useTopAgents(datasetId, limit = 100, filters = null, search = null) {
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -162,6 +163,9 @@ export function useTopAgents(datasetId, limit = 100, filters = null) {
     if (filters && Object.keys(filters).some(k => filters[k]?.length > 0)) {
       params.append('filters', JSON.stringify(filters));
     }
+    if (search && search.trim()) {
+      params.append('search', search.trim());
+    }
 
     const url = `${API_BASE_URL}/api/datasets/${datasetId}/agents/top?${params}`;
 
@@ -175,7 +179,7 @@ export function useTopAgents(datasetId, limit = 100, filters = null) {
         setError(err.message);
         setLoading(false);
       });
-  }, [datasetId, limit, JSON.stringify(filters)]);
+  }, [datasetId, limit, JSON.stringify(filters), search]);
 
   return { data, loading, error };
 }

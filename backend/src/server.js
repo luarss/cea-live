@@ -436,7 +436,7 @@ app.get('/api/datasets/:id/insights', (req, res) => {
 app.get('/api/datasets/:id/agents/top', (req, res) => {
   try {
     const { data } = loadDataset();
-    const { limit = 100, filters } = req.query;
+    const { limit = 100, filters, search } = req.query;
 
     // Apply filters if provided
     const parsedFilters = parseFilters(filters);
@@ -476,8 +476,8 @@ app.get('/api/datasets/:id/agents/top', (req, res) => {
       if (row.district !== '-') agent.districts[row.district] = (agent.districts[row.district] || 0) + 1;
     });
 
-    // Convert to array and sort by transaction count
-    const topAgents = Object.values(agentStats)
+    // Convert to array and apply search filter if provided
+    let agentsList = Object.values(agentStats)
       .map(agent => ({
         ...agent,
         topPropertyType: Object.entries(agent.propertyTypes).sort((a, b) => b[1] - a[1])[0] || ['Unknown', 0],
@@ -486,7 +486,19 @@ app.get('/api/datasets/:id/agents/top', (req, res) => {
         topTown: Object.keys(agent.towns).length > 0
           ? Object.entries(agent.towns).sort((a, b) => b[1] - a[1])[0]
           : null
-      }))
+      }));
+
+    // Apply search filter if provided
+    if (search && search.trim()) {
+      const searchLower = search.toLowerCase();
+      agentsList = agentsList.filter(agent =>
+        agent.name.toLowerCase().includes(searchLower) ||
+        agent.regNum.toLowerCase().includes(searchLower)
+      );
+    }
+
+    // Sort by transaction count and limit results
+    const topAgents = agentsList
       .sort((a, b) => b.totalTransactions - a.totalTransactions)
       .slice(0, parseInt(limit));
 

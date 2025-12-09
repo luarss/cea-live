@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useTopAgents } from '../../hooks/useAnalytics';
 import AgentProfile from './AgentProfile';
 import FilterPanel from '../analytics/FilterPanel';
@@ -8,18 +8,21 @@ export default function AgentInsights({ datasetId }) {
   const [selectedAgent, setSelectedAgent] = useState(null);
   const [displayLimit, setDisplayLimit] = useState(50);
   const [searchQuery, setSearchQuery] = useState('');
+  const [debouncedSearch, setDebouncedSearch] = useState('');
 
-  const { data: agentData, loading } = useTopAgents(datasetId, displayLimit, filters);
+  // Debounce search query with shorter delay
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setDebouncedSearch(searchQuery);
+    }, 300);
 
-  // Filter agents based on search query
-  const filteredAgents = agentData?.agents?.filter(agent => {
-    if (!searchQuery.trim()) return true;
-    const query = searchQuery.toLowerCase();
-    return (
-      agent.name.toLowerCase().includes(query) ||
-      agent.regNum.toLowerCase().includes(query)
-    );
-  }) || [];
+    return () => clearTimeout(timer);
+  }, [searchQuery]);
+
+  const { data: agentData, loading } = useTopAgents(datasetId, displayLimit, filters, debouncedSearch);
+
+  // Use the agents from the API response (backend already applies search filter)
+  const filteredAgents = agentData?.agents || [];
 
   if (loading) {
     return (
