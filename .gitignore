@@ -1,0 +1,30 @@
+# Dependencies
+node_modules/
+pipeline/node_modules/
+
+# Build outputs
+dist/
+.vite/
+
+# Data
+data/raw/
+*.log
+logs/
+
+# Environment
+.env
+.env.local
+
+# IDE
+.vscode/
+.idea/
+*.swp
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Package manager
+package-lock.json
+pnpm-lock.yaml
+yarn.lock
