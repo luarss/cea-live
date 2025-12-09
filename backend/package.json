@@ -1,0 +1,14 @@
+{
+  "name": "cea-viz-backend",
+  "version": "1.0.0",
+  "description": "CEA-VIZ data fetching pipeline for data.gov.sg",
+  "type": "module",
+  "scripts": {
+    "start": "node src/main.js",
+    "pipeline": "node src/main.js",
+    "test": "node --test tests/*.test.js"
+  },
+  "dependencies": {
+    "axios": "^1.6.0"
+  }
+}
