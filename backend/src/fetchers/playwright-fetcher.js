@@ -77,17 +77,24 @@ export function parseCSV(csvString) {
   // Handle empty input
   if (!csvString || csvString.trim().length === 0) return [];
 
-  // Use csv-parse with robust options to handle quoted fields and commas within values
-  const records = parse(csvString, {
-    columns: true,           // Use first row as headers
-    skip_empty_lines: true,  // Skip empty lines
-    trim: true,              // Trim whitespace from fields
-    relax_quotes: true,      // Be lenient with quotes
-    quote: '"',              // Specify quote character
-    escape: '"'              // Specify escape character
-  });
+  try {
+    // Use csv-parse with robust options to handle quoted fields and commas within values
+    const records = parse(csvString, {
+      columns: true,           // Use first row as headers
+      skip_empty_lines: true,  // Skip empty lines
+      trim: true,              // Trim whitespace from fields
+      relax_quotes: true,      // Be lenient with quotes
+      quote: '"',              // Specify quote character
+      escape: '"'              // Specify escape character
+    });
 
-  return records;
+    return records;
+  } catch (error) {
+    console.error('Error parsing CSV:', error.message);
+    console.error('CSV parsing failed. This may be due to malformed CSV data.');
+    // Return empty array instead of crashing the process
+    return [];
+  }
 }
 
 /**
