@@ -16,6 +16,46 @@ const PORT = process.env.PORT || 3003;
 app.use(cors());
 app.use(express.json());
 
+// Helper functions for filter parsing and application
+/**
+ * Parse filters from query string
+ * @param {string} filtersString - JSON string of filters from req.query.filters
+ * @returns {Object|null} - Parsed filters object, or null if invalid/missing
+ */
+function parseFilters(filtersString) {
+  if (!filtersString) {
+    return null;
+  }
+
+  try {
+    return JSON.parse(filtersString);
+  } catch (error) {
+    // Return a special error object to indicate parsing failure
+    return { __parseError: true };
+  }
+}
+
+/**
+ * Apply filters to dataset
+ * @param {Array} data - Array of data records
+ * @param {Object|null} filters - Filters object from parseFilters
+ * @returns {Array} - Filtered data array
+ */
+function applyFilters(data, filters) {
+  if (!filters || Object.keys(filters).length === 0) {
+    return data;
+  }
+
+  return data.filter(row => {
+    return Object.entries(filters).every(([key, value]) => {
+      if (Array.isArray(value)) {
+        return value.includes(row[key]);
+      }
+      return row[key] === value;
+    });
+  });
+}
+
 // Serve frontend static files in production
 const frontendDistPath = join(ROOT_DIR, 'frontend', 'dist');
 if (existsSync(frontendDistPath)) {
@@ -90,22 +130,11 @@ app.get('/api/datasets/:id/data', (req, res) => {
     const offset = (page - 1) * limit;
 
     // Apply filters if provided
-    let filteredData = data;
-    if (req.query.filters) {
-      try {
-        const filters = JSON.parse(req.query.filters);
-        filteredData = data.filter(row => {
-          return Object.entries(filters).every(([key, value]) => {
-            if (Array.isArray(value)) {
-              return value.includes(row[key]);
-            }
-            return row[key] === value;
-          });
-        });
-      } catch (error) {
-        return res.status(400).json({ error: 'Invalid filters format' });
-      }
+    const parsedFilters = parseFilters(req.query.filters);
+    if (parsedFilters && parsedFilters.__parseError) {
+      return res.status(400).json({ error: 'Invalid filters format' });
     }
+    const filteredData = applyFilters(data, parsedFilters);
 
     // Paginate
     const paginatedData = filteredData.slice(offset, offset + limit);
@@ -173,22 +202,11 @@ app.get('/api/datasets/:id/analytics', (req, res) => {
     }
 
     // Apply filters if provided
-    let filteredData = data;
-    if (filters) {
-      try {
-        const filterObj = JSON.parse(filters);
-        filteredData = data.filter(row => {
-          return Object.entries(filterObj).every(([key, value]) => {
-            if (Array.isArray(value)) {
-              return value.includes(row[key]);
-            }
-            return row[key] === value;
-          });
-        });
-      } catch (error) {
-        return res.status(400).json({ error: 'Invalid filters format' });
-      }
+    const parsedFilters = parseFilters(filters);
+    if (parsedFilters && parsedFilters.__parseError) {
+      return res.status(400).json({ error: 'Invalid filters format' });
     }
+    const filteredData = applyFilters(data, parsedFilters);
 
     // Count by dimensions
     const counts = {};
@@ -238,22 +256,11 @@ app.get('/api/datasets/:id/timeseries', (req, res) => {
     const { period = 'month', groupBy, filters } = req.query;
 
     // Apply filters if provided
-    let filteredData = data;
-    if (filters) {
-      try {
-        const filterObj = JSON.parse(filters);
-        filteredData = data.filter(row => {
-          return Object.entries(filterObj).every(([key, value]) => {
-            if (Array.isArray(value)) {
-              return value.includes(row[key]);
-            }
-            return row[key] === value;
-          });
-        });
-      } catch (error) {
-        return res.status(400).json({ error: 'Invalid filters format' });
-      }
+    const parsedFilters = parseFilters(filters);
+    if (parsedFilters && parsedFilters.__parseError) {
+      return res.status(400).json({ error: 'Invalid filters format' });
     }
+    const filteredData = applyFilters(data, parsedFilters);
 
     // Group data by period
     const grouped = groupByPeriod(filteredData, period, groupBy);
@@ -291,22 +298,11 @@ app.get('/api/datasets/:id/insights', (req, res) => {
     const { filters } = req.query;
 
     // Apply filters if provided
-    let filteredData = data;
-    if (filters) {
-      try {
-        const filterObj = JSON.parse(filters);
-        filteredData = data.filter(row => {
-          return Object.entries(filterObj).every(([key, value]) => {
-            if (Array.isArray(value)) {
-              return value.includes(row[key]);
-            }
-            return row[key] === value;
-          });
-        });
-      } catch (error) {
-        return res.status(400).json({ error: 'Invalid filters format' });
-      }
+    const parsedFilters = parseFilters(filters);
+    if (parsedFilters && parsedFilters.__parseError) {
+      return res.status(400).json({ error: 'Invalid filters format' });
     }
+    const filteredData = applyFilters(data, parsedFilters);
 
     // Calculate summary statistics
     const totalTransactions = filteredData.length;
@@ -389,22 +385,11 @@ app.get('/api/datasets/:id/agents/top', (req, res) => {
     const { limit = 100, filters } = req.query;
 
     // Apply filters if provided
-    let filteredData = data;
-    if (filters) {
-      try {
-        const filterObj = JSON.parse(filters);
-        filteredData = data.filter(row => {
-          return Object.entries(filterObj).every(([key, value]) => {
-            if (Array.isArray(value)) {
-              return value.includes(row[key]);
-            }
-            return row[key] === value;
-          });
-        });
-      } catch (error) {
-        return res.status(400).json({ error: 'Invalid filters format' });
-      }
+    const parsedFilters = parseFilters(filters);
+    if (parsedFilters && parsedFilters.__parseError) {
+      return res.status(400).json({ error: 'Invalid filters format' });
     }
+    const filteredData = applyFilters(data, parsedFilters);
 
     // Aggregate by agent
     const agentStats = {};
