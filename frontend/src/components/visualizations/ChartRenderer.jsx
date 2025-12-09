@@ -1,9 +1,4 @@
 import React from 'react';
-import { prepareChartData } from '../../utils/chartSelector';
-import LineChartComponent from './LineChart';
-import BarChartComponent from './BarChart';
-import PieChartComponent from './PieChart';
-import ScatterPlotComponent from './ScatterPlot';
 import DataTable from './DataTable';
 
 export default function ChartRenderer({ recommendation, dataset }) {
@@ -16,28 +11,15 @@ export default function ChartRenderer({ recommendation, dataset }) {
   }
 
   const { type, config, reasoning } = recommendation;
-  const chartData = prepareChartData(recommendation, dataset);
 
-  const renderChart = () => {
-    switch (type) {
-      case 'line':
-        return <LineChartComponent data={chartData} config={config} />;
-      case 'bar':
-        return <BarChartComponent data={chartData} config={config} />;
-      case 'pie':
-        return <PieChartComponent data={chartData} config={config} />;
-      case 'scatter':
-        return <ScatterPlotComponent data={chartData} config={config} />;
-      case 'table':
-        return <DataTable data={chartData} schema={dataset.schema} />;
-      default:
-        return (
-          <div className="text-center py-12 text-gray-500">
-            Unsupported chart type: {type}
-          </div>
-        );
-    }
-  };
+  // Only support table visualization now
+  if (type !== 'table') {
+    return (
+      <div className="text-center py-12 text-gray-500">
+        Unsupported chart type: {type}
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-4">
@@ -49,9 +31,9 @@ export default function ChartRenderer({ recommendation, dataset }) {
         )}
       </div>
 
-      {/* Chart */}
+      {/* Table */}
       <div className="bg-gray-50 rounded-lg p-4">
-        {renderChart()}
+        <DataTable data={dataset.data} schema={dataset.schema} />
       </div>
     </div>
   );
