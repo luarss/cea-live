@@ -5,8 +5,9 @@ on:
     - cron: '0 0 * * *'
   workflow_dispatch:
   push:
+    branches:
+      - main
     paths:
-      - 'data/sources.config.json'
       - 'backend/**'
 
 jobs:
@@ -38,19 +39,14 @@ jobs:
         env:
           NODE_ENV: production
 
-      - name: Check for data changes
-        id: git-check
-        run: |
-          git add data/processed data/*.csv 2>/dev/null || true
-          git diff --cached --exit-code || echo "changed=true" >> $GITHUB_OUTPUT
-
-      - name: Commit processed data
-        if: steps.git-check.outputs.changed == 'true'
-        run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-          git commit -m "🤖 Update processed data - $(date -u +'%Y-%m-%d %H:%M:%S UTC')"
-          git push
+      - name: Commit raw data changes
+        uses: stefanzweifel/git-auto-commit-action@v5
+        with:
+          commit_message: "🤖 Update raw data"
+          file_pattern: 'data/*.csv'
+          commit_user_name: github-actions[bot]
+          commit_user_email: github-actions[bot]@users.noreply.github.com
+          commit_author: github-actions[bot] <github-actions[bot]@users.noreply.github.com>
 
       - name: Upload pipeline logs on failure
         if: failure()
