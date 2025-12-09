@@ -7,8 +7,19 @@ export default function AgentInsights({ datasetId }) {
   const [filters, setFilters] = useState({});
   const [selectedAgent, setSelectedAgent] = useState(null);
   const [displayLimit, setDisplayLimit] = useState(50);
+  const [searchQuery, setSearchQuery] = useState('');
 
   const { data: agentData, loading } = useTopAgents(datasetId, displayLimit, filters);
+
+  // Filter agents based on search query
+  const filteredAgents = agentData?.agents?.filter(agent => {
+    if (!searchQuery.trim()) return true;
+    const query = searchQuery.toLowerCase();
+    return (
+      agent.name.toLowerCase().includes(query) ||
+      agent.regNum.toLowerCase().includes(query)
+    );
+  }) || [];
 
   if (loading) {
     return (
@@ -42,6 +53,42 @@ export default function AgentInsights({ datasetId }) {
       {/* Filter Panel */}
       <FilterPanel filters={filters} onFiltersChange={setFilters} />
 
+      {/* Search Bar */}
+      <div className="card">
+        <div className="relative">
+          <input
+            type="text"
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            placeholder="Search by agent name or registration number..."
+            className="w-full px-4 py-3 pl-10 pr-4 text-gray-900 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+          />
+          <svg
+            className="absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gray-400"
+            fill="none"
+            stroke="currentColor"
+            viewBox="0 0 24 24"
+          >
+            <path
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              strokeWidth={2}
+              d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"
+            />
+          </svg>
+          {searchQuery && (
+            <button
+              onClick={() => setSearchQuery('')}
+              className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-gray-600"
+            >
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            </button>
+          )}
+        </div>
+      </div>
+
       {/* Summary Stats */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
         <div className="card">
@@ -49,8 +96,8 @@ export default function AgentInsights({ datasetId }) {
           <div className="text-2xl font-bold">{agentData.total.toLocaleString()}</div>
         </div>
         <div className="card">
-          <div className="text-sm text-gray-500 mb-1">Showing Top</div>
-          <div className="text-2xl font-bold">{agentData.showing}</div>
+          <div className="text-sm text-gray-500 mb-1">Showing Results</div>
+          <div className="text-2xl font-bold">{filteredAgents.length}</div>
         </div>
         <div className="card">
           <div className="text-sm text-gray-500 mb-1">Display Limit</div>
@@ -85,7 +132,7 @@ export default function AgentInsights({ datasetId }) {
               </tr>
             </thead>
             <tbody>
-              {agentData.agents.map((agent, index) => (
+              {filteredAgents.map((agent, index) => (
                 <tr
                   key={agent.regNum}
                   className="border-b border-gray-100 hover:bg-gray-50 transition-colors"
@@ -146,13 +193,13 @@ export default function AgentInsights({ datasetId }) {
       </div>
 
       {/* Distribution Insights */}
-      {agentData.agents.length > 0 && (
+      {filteredAgents.length > 0 && (
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
           {/* Top 10 Agents Chart */}
           <div className="card">
             <h4 className="font-semibold mb-4">Top 10 Agents by Volume</h4>
             <div className="space-y-3">
-              {agentData.agents.slice(0, 10).map((agent, index) => (
+              {filteredAgents.slice(0, 10).map((agent, index) => (
               <div key={agent.regNum} className="flex items-center gap-3">
                 <div className="w-8 text-sm font-semibold text-gray-600">#{index + 1}</div>
                 <div className="flex-1">
@@ -166,7 +213,7 @@ export default function AgentInsights({ datasetId }) {
                     <div
                       className="bg-primary-500 h-2 rounded-full transition-all"
                       style={{
-                        width: `${(agent.totalTransactions / agentData.agents[0].totalTransactions) * 100}%`
+                        width: `${(agent.totalTransactions / filteredAgents[0].totalTransactions) * 100}%`
                       }}
                     ></div>
                   </div>
