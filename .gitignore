@@ -28,3 +28,4 @@ Thumbs.db
 # Package manager (keep lock files for reproducible builds)
 pnpm-lock.yaml
 yarn.lock
+.playwright-mcp
