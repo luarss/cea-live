@@ -1,5 +1,6 @@
 import { chromium } from 'playwright';
 import axios from 'axios';
+import { parse } from 'csv-parse/sync';
 
 /**
  * Fetch CSV data from data.gov.sg using Playwright to extract the S3 URL
@@ -73,29 +74,19 @@ export async function downloadCSVFromS3(s3Url) {
  * @returns {Array<Object>} - Array of row objects
  */
 export function parseCSV(csvString) {
-  const lines = csvString.split('\n');
-  if (lines.length === 0) return [];
+  // Handle empty input
+  if (!csvString || csvString.trim().length === 0) return [];
 
-  // Get headers from first line
-  const headers = lines[0].split(',').map(h => h.trim());
+  // Use csv-parse with robust options to handle quoted fields and commas within values
+  const records = parse(csvString, {
+    columns: true,           // Use first row as headers
+    skip_empty_lines: true,  // Skip empty lines
+    trim: true,              // Trim whitespace from fields
+    relax_quotes: true,      // Be lenient with quotes
+    relax_column_count: true // Allow inconsistent column counts
+  });
 
-  // Parse data rows
-  const data = [];
-  for (let i = 1; i < lines.length; i++) {
-    const line = lines[i].trim();
-    if (!line) continue;
-
-    const values = line.split(',').map(v => v.trim());
-    const row = {};
-
-    headers.forEach((header, index) => {
-      row[header] = values[index] || '';
-    });
-
-    data.push(row);
-  }
-
-  return data;
+  return records;
 }
 
 /**
