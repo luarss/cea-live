@@ -3,6 +3,7 @@ import { format } from 'date-fns';
 import StatsSummary from './analysis/StatsSummary';
 import ChartRenderer from './visualizations/ChartRenderer';
 import AnalyticsDashboard from './analytics/AnalyticsDashboard';
+import AgentInsights from './agents/AgentInsights';
 
 export default function DatasetView({ dataset, loading, error }) {
   const [activeTab, setActiveTab] = useState('analytics'); // Default to analytics
@@ -74,6 +75,18 @@ export default function DatasetView({ dataset, loading, error }) {
             Analytics
           </button>
           <button
+            onClick={() => setActiveTab('agents')}
+            className={`
+              px-4 py-2 font-medium text-sm border-b-2 transition-colors
+              ${activeTab === 'agents'
+                ? 'border-primary-500 text-primary-600'
+                : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+              }
+            `}
+          >
+            Agents
+          </button>
+          <button
             onClick={() => setActiveTab('data')}
             className={`
               px-4 py-2 font-medium text-sm border-b-2 transition-colors
@@ -91,6 +104,10 @@ export default function DatasetView({ dataset, loading, error }) {
       {/* Tab Content */}
       {activeTab === 'analytics' && (
         <AnalyticsDashboard datasetId={dataset.id} />
+      )}
+
+      {activeTab === 'agents' && (
+        <AgentInsights datasetId={dataset.id} />
       )}
 
       {activeTab === 'data' && (

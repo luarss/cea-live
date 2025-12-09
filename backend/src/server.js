@@ -382,6 +382,163 @@ app.get('/api/datasets/:id/insights', (req, res) => {
   }
 });
 
+// Top agents ranking endpoint
+app.get('/api/datasets/:id/agents/top', (req, res) => {
+  try {
+    const { data } = loadDataset();
+    const { limit = 100, filters } = req.query;
+
+    // Apply filters if provided
+    let filteredData = data;
+    if (filters) {
+      try {
+        const filterObj = JSON.parse(filters);
+        filteredData = data.filter(row => {
+          return Object.entries(filterObj).every(([key, value]) => {
+            if (Array.isArray(value)) {
+              return value.includes(row[key]);
+            }
+            return row[key] === value;
+          });
+        });
+      } catch (error) {
+        return res.status(400).json({ error: 'Invalid filters format' });
+      }
+    }
+
+    // Aggregate by agent
+    const agentStats = {};
+    filteredData.forEach(row => {
+      const agentKey = row.salesperson_reg_num;
+      if (!agentStats[agentKey]) {
+        agentStats[agentKey] = {
+          name: row.salesperson_name,
+          regNum: row.salesperson_reg_num,
+          totalTransactions: 0,
+          propertyTypes: {},
+          transactionTypes: {},
+          representation: {},
+          towns: {},
+          districts: {}
+        };
+      }
+
+      const agent = agentStats[agentKey];
+      agent.totalTransactions++;
+      agent.propertyTypes[row.property_type] = (agent.propertyTypes[row.property_type] || 0) + 1;
+      agent.transactionTypes[row.transaction_type] = (agent.transactionTypes[row.transaction_type] || 0) + 1;
+      agent.representation[row.represented] = (agent.representation[row.represented] || 0) + 1;
+      if (row.town !== '-') agent.towns[row.town] = (agent.towns[row.town] || 0) + 1;
+      if (row.district !== '-') agent.districts[row.district] = (agent.districts[row.district] || 0) + 1;
+    });
+
+    // Convert to array and sort by transaction count
+    const topAgents = Object.values(agentStats)
+      .map(agent => ({
+        ...agent,
+        topPropertyType: Object.entries(agent.propertyTypes).sort((a, b) => b[1] - a[1])[0],
+        topTransactionType: Object.entries(agent.transactionTypes).sort((a, b) => b[1] - a[1])[0],
+        topRepresentation: Object.entries(agent.representation).sort((a, b) => b[1] - a[1])[0],
+        topTown: Object.keys(agent.towns).length > 0
+          ? Object.entries(agent.towns).sort((a, b) => b[1] - a[1])[0]
+          : null
+      }))
+      .sort((a, b) => b.totalTransactions - a.totalTransactions)
+      .slice(0, parseInt(limit));
+
+    res.json({
+      total: Object.keys(agentStats).length,
+      showing: topAgents.length,
+      agents: topAgents
+    });
+  } catch (error) {
+    console.error('Error calculating top agents:', error);
+    res.status(500).json({ error: 'Failed to calculate top agents' });
+  }
+});
+
+// Individual agent profile endpoint
+app.get('/api/datasets/:id/agents/:regNum', (req, res) => {
+  try {
+    const { data } = loadDataset();
+    const { regNum } = req.params;
+
+    // Filter transactions for this agent
+    const agentTransactions = data.filter(row => row.salesperson_reg_num === regNum);
+
+    if (agentTransactions.length === 0) {
+      return res.status(404).json({ error: 'Agent not found' });
+    }
+
+    const agent = {
+      name: agentTransactions[0].salesperson_name,
+      regNum: regNum,
+      totalTransactions: agentTransactions.length
+    };
+
+    // Get date range
+    const dateRange = getDateRange(agentTransactions);
+
+    // Property type breakdown
+    const propertyTypes = {};
+    agentTransactions.forEach(t => {
+      propertyTypes[t.property_type] = (propertyTypes[t.property_type] || 0) + 1;
+    });
+    const propertyTypeStats = Object.entries(propertyTypes)
+      .map(([type, count]) => ({ type, count, percentage: (count / agent.totalTransactions * 100).toFixed(1) }))
+      .sort((a, b) => b.count - a.count);
+
+    // Transaction type breakdown
+    const transactionTypes = {};
+    agentTransactions.forEach(t => {
+      transactionTypes[t.transaction_type] = (transactionTypes[t.transaction_type] || 0) + 1;
+    });
+    const transactionTypeStats = Object.entries(transactionTypes)
+      .map(([type, count]) => ({ type, count, percentage: (count / agent.totalTransactions * 100).toFixed(1) }))
+      .sort((a, b) => b.count - a.count);
+
+    // Representation breakdown
+    const representation = {};
+    agentTransactions.forEach(t => {
+      representation[t.represented] = (representation[t.represented] || 0) + 1;
+    });
+    const representationStats = Object.entries(representation)
+      .map(([type, count]) => ({ type, count, percentage: (count / agent.totalTransactions * 100).toFixed(1) }))
+      .sort((a, b) => b.count - a.count);
+
+    // Town distribution (top 10)
+    const towns = {};
+    agentTransactions.forEach(t => {
+      if (t.town !== '-') towns[t.town] = (towns[t.town] || 0) + 1;
+    });
+    const topTowns = Object.entries(towns)
+      .map(([town, count]) => ({ town, count, percentage: (count / agent.totalTransactions * 100).toFixed(1) }))
+      .sort((a, b) => b.count - a.count)
+      .slice(0, 10);
+
+    // Time series data
+    const timeSeries = groupByPeriod(agentTransactions, 'month');
+    const sortedPeriods = sortPeriods(Object.keys(timeSeries));
+    const monthlyActivity = sortedPeriods.map(period => ({
+      period,
+      count: timeSeries[period]
+    }));
+
+    res.json({
+      agent,
+      dateRange,
+      propertyTypes: propertyTypeStats,
+      transactionTypes: transactionTypeStats,
+      representation: representationStats,
+      topTowns,
+      monthlyActivity
+    });
+  } catch (error) {
+    console.error('Error fetching agent profile:', error);
+    res.status(500).json({ error: 'Failed to fetch agent profile' });
+  }
+});
+
 // Health check
 app.get('/health', (req, res) => {
   res.json({ status: 'ok', timestamp: new Date().toISOString() });
