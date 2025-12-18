@@ -9,6 +9,7 @@ services:
       npm install && \
       npx playwright install chromium && \
       npm start && \
+      npm run migrate && \
       cd ../frontend && \
       npm install && \
       npm run build
