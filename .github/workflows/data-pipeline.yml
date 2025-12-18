@@ -31,14 +31,14 @@ jobs:
           cache: 'npm'
           cache-dependency-path: 'backend/package-lock.json'
 
-      - name: Install pipeline dependencies
-        run: cd backend && npm ci
+      - name: Install dependencies
+        run: make install-backend
 
       - name: Install Playwright browsers
         run: cd backend && npx playwright install --with-deps chromium
 
-      - name: Run data pipeline
-        run: cd backend && npm run pipeline
+      - name: Download fresh data
+        run: make download
         env:
           NODE_ENV: production
 
