@@ -90,7 +90,7 @@ function applyFilters(data, filters) {
 const frontendDistPath = join(ROOT_DIR, 'frontend', 'dist');
 if (existsSync(frontendDistPath)) {
   console.log('Serving frontend from:', frontendDistPath);
-  app.use(express.static(frontendDistPath));
+  app.use(express.static(frontendDistPath, { index: 'index.html' }));
 }
 
 // In-memory cache for dataset
@@ -623,8 +623,9 @@ app.get('/health', (req, res) => {
 
 // Catch-all route - serve frontend for client-side routing
 // Only used in production when frontend is built
+// Use middleware instead of route for Express 5 compatibility
 if (existsSync(frontendDistPath)) {
-  app.get('/*', (req, res) => {
+  app.use((req, res) => {
     const indexPath = join(frontendDistPath, 'index.html');
     res.sendFile(indexPath);
   });
