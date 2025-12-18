@@ -7,9 +7,7 @@ services:
     buildCommand: |
       cd backend && \
       npm install && \
-      npx playwright install chromium && \
-      npm start && \
-      npm run migrate && \
+      npm run build && \
       cd ../frontend && \
       npm install && \
       npm run build

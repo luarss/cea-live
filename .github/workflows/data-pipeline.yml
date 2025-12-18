@@ -37,8 +37,8 @@ jobs:
       - name: Install Playwright browsers
         run: cd backend && npx playwright install --with-deps chromium
 
-      - name: Run data pipeline
-        run: cd backend && npm run pipeline
+      - name: Download fresh data
+        run: cd backend && npm run download
         env:
           NODE_ENV: production
 
