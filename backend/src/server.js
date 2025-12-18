@@ -3,7 +3,7 @@ import cors from 'cors';
 import { readFileSync, existsSync } from 'fs';
 import { join, dirname } from 'path';
 import { fileURLToPath } from 'url';
-import { groupByPeriod, sortPeriods, getDateRange } from './utils/dateParser.js';
+import db from './database.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -65,26 +65,6 @@ function parseFilters(filtersString) {
   }
 }
 
-/**
- * Apply filters to dataset
- * @param {Array} data - Array of data records
- * @param {Object|null} filters - Filters object from parseFilters
- * @returns {Array} - Filtered data array
- */
-function applyFilters(data, filters) {
-  if (!filters || Object.keys(filters).length === 0) {
-    return data;
-  }
-
-  return data.filter(row => {
-    return Object.entries(filters).every(([key, value]) => {
-      if (Array.isArray(value)) {
-        return value.includes(row[key]);
-      }
-      return row[key] === value;
-    });
-  });
-}
 
 // Serve frontend static files in production
 const frontendDistPath = join(ROOT_DIR, 'frontend', 'dist');
@@ -93,31 +73,27 @@ if (existsSync(frontendDistPath)) {
   app.use(express.static(frontendDistPath, { index: 'index.html' }));
 }
 
-// In-memory cache for dataset
-let dataCache = null;
-let metadataCache = null;
-
-function loadDataset() {
-  if (!dataCache) {
-    console.log('Loading dataset into memory...');
-    const dataPath = join(ROOT_DIR, 'data', 'processed', 'cea-property-transactions.json');
-    const rawData = readFileSync(dataPath, 'utf-8');
-    const dataset = JSON.parse(rawData);
-
-    dataCache = dataset.data;
-    metadataCache = {
-      id: dataset.id,
-      name: dataset.name,
-      description: dataset.description,
-      metadata: dataset.metadata,
-      schema: dataset.schema,
-      visualizationRecommendations: dataset.visualizationRecommendations
-    };
-
-    console.log(`Loaded ${dataCache.length} records into memory`);
+// SQLite helper functions
+function getMetadata() {
+  const metaRows = db.prepare('SELECT key, value FROM metadata').all();
+  const meta = {};
+  for (const row of metaRows) {
+    try {
+      meta[row.key] = JSON.parse(row.value);
+    } catch {
+      meta[row.key] = row.value;
+    }
   }
-  return { data: dataCache, metadata: metadataCache };
+  return {
+    id: meta.id,
+    name: meta.name,
+    description: meta.description,
+    metadata: meta.metadata,
+    schema: meta.schema,
+    visualizationRecommendations: meta.visualizationRecommendations
+  };
 }
+
 
 // Routes
 
@@ -136,7 +112,7 @@ app.get('/api/datasets', (req, res) => {
 // Get dataset metadata
 app.get('/api/datasets/:id', (req, res) => {
   try {
-    const { metadata } = loadDataset();
+    const metadata = getMetadata();
 
     if (metadata.id !== req.params.id) {
       return res.status(404).json({ error: 'Dataset not found' });
@@ -161,30 +137,52 @@ app.get('/api/datasets/:id', (req, res) => {
 // Get dataset data with pagination and filtering
 app.get('/api/datasets/:id/data', (req, res) => {
   try {
-    const { data } = loadDataset();
-
     // Parse query parameters
     const page = parseInt(req.query.page) || 1;
     const limit = Math.min(parseInt(req.query.limit) || 100, 1000); // Max 1000 per request
     const offset = (page - 1) * limit;
+
+    // Build SQL query with filters
+    let sql = 'SELECT * FROM transactions';
+    let countSql = 'SELECT COUNT(*) as total FROM transactions';
+    const params = [];
 
     // Apply filters if provided
     const parsedFilters = parseFilters(req.query.filters);
     if (parsedFilters && parsedFilters.__parseError) {
       return res.status(400).json({ error: 'Invalid filters format' });
     }
-    const filteredData = applyFilters(data, parsedFilters);
 
-    // Paginate
-    const paginatedData = filteredData.slice(offset, offset + limit);
+    if (parsedFilters && Object.keys(parsedFilters).length > 0) {
+      const whereClauses = [];
+      for (const [key, value] of Object.entries(parsedFilters)) {
+        if (Array.isArray(value)) {
+          whereClauses.push(`${key} IN (${value.map(() => '?').join(',')})`);
+          params.push(...value);
+        } else {
+          whereClauses.push(`${key} = ?`);
+          params.push(value);
+        }
+      }
+      const whereClause = ' WHERE ' + whereClauses.join(' AND ');
+      sql += whereClause;
+      countSql += whereClause;
+    }
+
+    // Get total count
+    const { total } = db.prepare(countSql).get(...params);
+
+    // Add pagination
+    sql += ' LIMIT ? OFFSET ?';
+    const paginatedData = db.prepare(sql).all(...params, limit, offset);
 
     res.json({
       data: paginatedData,
       pagination: {
         page,
         limit,
-        total: filteredData.length,
-        totalPages: Math.ceil(filteredData.length / limit)
+        total,
+        totalPages: Math.ceil(total / limit)
       }
     });
   } catch (error) {
@@ -196,33 +194,39 @@ app.get('/api/datasets/:id/data', (req, res) => {
 // Get aggregated statistics
 app.get('/api/datasets/:id/stats', (req, res) => {
   try {
-    const { data } = loadDataset();
     const field = req.query.field;
 
     if (!field) {
       return res.status(400).json({ error: 'Field parameter is required' });
     }
 
-    // Count occurrences of each value
-    const counts = {};
-    data.forEach(row => {
-      const value = row[field] || '(null)';
-      counts[value] = (counts[value] || 0) + 1;
-    });
+    // Get total count
+    const { total } = db.prepare('SELECT COUNT(*) as total FROM transactions').get();
 
-    // Sort by count descending
-    const stats = Object.entries(counts)
-      .map(([value, count]) => ({ value, count }))
-      .sort((a, b) => b.count - a.count);
+    // Get value counts using SQL GROUP BY
+    const sql = `
+      SELECT
+        COALESCE(${field}, '(null)') as value,
+        COUNT(*) as count
+      FROM transactions
+      GROUP BY ${field}
+      ORDER BY count DESC
+    `;
+
+    let stats = db.prepare(sql).all();
+
+    // Get unique values count
+    const uniqueValues = stats.length;
 
     // Support optional limit parameter
     const limit = req.query.limit ? parseInt(req.query.limit) : stats.length;
+    stats = stats.slice(0, limit);
 
     res.json({
       field,
-      total: data.length,
-      uniqueValues: stats.length,
-      stats: stats.slice(0, limit)
+      total,
+      uniqueValues,
+      stats
     });
   } catch (error) {
     console.error('Error calculating stats:', error);
@@ -233,11 +237,33 @@ app.get('/api/datasets/:id/stats', (req, res) => {
 // Multi-dimensional analytics endpoint
 app.get('/api/datasets/:id/analytics', (req, res) => {
   try {
-    const { data } = loadDataset();
     const { dimension1, dimension2, filters } = req.query;
 
     if (!dimension1) {
       return res.status(400).json({ error: 'dimension1 parameter is required' });
+    }
+
+    // Build SQL query
+    const params = [];
+    let sql, countSql;
+
+    if (dimension2) {
+      sql = `
+        SELECT
+          COALESCE(${dimension1}, 'Unknown') as ${dimension1},
+          COALESCE(${dimension2}, 'Unknown') as ${dimension2},
+          COUNT(*) as count
+        FROM transactions
+      `;
+      countSql = 'SELECT COUNT(*) as total FROM transactions';
+    } else {
+      sql = `
+        SELECT
+          COALESCE(${dimension1}, 'Unknown') as ${dimension1},
+          COUNT(*) as count
+        FROM transactions
+      `;
+      countSql = 'SELECT COUNT(*) as total FROM transactions';
     }
 
     // Apply filters if provided
@@ -245,37 +271,39 @@ app.get('/api/datasets/:id/analytics', (req, res) => {
     if (parsedFilters && parsedFilters.__parseError) {
       return res.status(400).json({ error: 'Invalid filters format' });
     }
-    const filteredData = applyFilters(data, parsedFilters);
 
-    // Count by dimensions
-    const counts = {};
-    filteredData.forEach(row => {
-      const value1 = row[dimension1] || 'Unknown';
-
-      if (dimension2) {
-        const value2 = row[dimension2] || 'Unknown';
-        const key = `${value1}|${value2}`;
-        counts[key] = (counts[key] || 0) + 1;
-      } else {
-        counts[value1] = (counts[value1] || 0) + 1;
+    if (parsedFilters && Object.keys(parsedFilters).length > 0) {
+      const whereClauses = [];
+      for (const [key, value] of Object.entries(parsedFilters)) {
+        if (Array.isArray(value)) {
+          whereClauses.push(`${key} IN (${value.map(() => '?').join(',')})`);
+          params.push(...value);
+        } else {
+          whereClauses.push(`${key} = ?`);
+          params.push(value);
+        }
       }
-    });
+      const whereClause = ' WHERE ' + whereClauses.join(' AND ');
+      sql += whereClause;
+      countSql += whereClause;
+    }
 
-    // Format results
-    let results;
-    let chartData;
-
+    // Add GROUP BY and ORDER BY
     if (dimension2) {
-      results = Object.entries(counts).map(([key, count]) => {
-        const [val1, val2] = key.split('|');
-        return { [dimension1]: val1, [dimension2]: val2, count };
-      });
+      sql += ` GROUP BY ${dimension1}, ${dimension2} ORDER BY count DESC`;
+    } else {
+      sql += ` GROUP BY ${dimension1} ORDER BY count DESC`;
+    }
+
+    // Execute queries
+    const results = db.prepare(sql).all(...params);
+    const { total } = db.prepare(countSql).get(...params);
+
+    // Format chart data
+    let chartData;
+    if (dimension2) {
       chartData = results; // For 2D data, return as-is
     } else {
-      results = Object.entries(counts).map(([value, count]) => {
-        return { [dimension1]: value, count };
-      });
-
       // Create chart-ready format with 'name' and 'value' keys for pie charts
       chartData = results.map(item => ({
         name: item[dimension1],
@@ -283,15 +311,11 @@ app.get('/api/datasets/:id/analytics', (req, res) => {
       }));
     }
 
-    // Sort by count descending
-    results.sort((a, b) => b.count - a.count);
-    chartData.sort((a, b) => (b.value || b.count) - (a.value || a.count));
-
     res.json({
       dimensions: dimension2 ? [dimension1, dimension2] : [dimension1],
       data: results,
-      chartData: chartData, // Chart-ready format
-      total: filteredData.length
+      chartData: chartData,
+      total
     });
   } catch (error) {
     console.error('Error calculating analytics:', error);
@@ -302,42 +326,109 @@ app.get('/api/datasets/:id/analytics', (req, res) => {
 // Time-series analytics endpoint
 app.get('/api/datasets/:id/timeseries', (req, res) => {
   try {
-    const { data } = loadDataset();
     const { period = 'month', groupBy, filters } = req.query;
+
+    // Build SQL query with date parsing
+    // Convert "MMM-YYYY" format to "YYYY-MM" or "YYYY"
+    const monthConversion = `
+      CASE substr(transaction_date, 1, 3)
+        WHEN 'JAN' THEN '01' WHEN 'FEB' THEN '02' WHEN 'MAR' THEN '03'
+        WHEN 'APR' THEN '04' WHEN 'MAY' THEN '05' WHEN 'JUN' THEN '06'
+        WHEN 'JUL' THEN '07' WHEN 'AUG' THEN '08' WHEN 'SEP' THEN '09'
+        WHEN 'OCT' THEN '10' WHEN 'NOV' THEN '11' WHEN 'DEC' THEN '12'
+      END
+    `;
+
+    const periodExpression = period === 'year'
+      ? `substr(transaction_date, -4)` // Extract "YYYY" from "MMM-YYYY"
+      : `substr(transaction_date, -4) || '-' || ${monthConversion}`; // "YYYY-MM"
+
+    const params = [];
+    let sql, countSql;
+
+    if (groupBy) {
+      sql = `
+        SELECT
+          ${periodExpression} as period,
+          COALESCE(${groupBy}, 'Unknown') as groupByValue,
+          COUNT(*) as count
+        FROM transactions
+        WHERE transaction_date IS NOT NULL AND transaction_date != '-'
+      `;
+      countSql = `SELECT COUNT(*) as total FROM transactions WHERE transaction_date IS NOT NULL AND transaction_date != '-'`;
+    } else {
+      sql = `
+        SELECT
+          ${periodExpression} as period,
+          COUNT(*) as count
+        FROM transactions
+        WHERE transaction_date IS NOT NULL AND transaction_date != '-'
+      `;
+      countSql = `SELECT COUNT(*) as total FROM transactions WHERE transaction_date IS NOT NULL AND transaction_date != '-'`;
+    }
 
     // Apply filters if provided
     const parsedFilters = parseFilters(filters);
     if (parsedFilters && parsedFilters.__parseError) {
       return res.status(400).json({ error: 'Invalid filters format' });
     }
-    const filteredData = applyFilters(data, parsedFilters);
 
-    // Group data by period
-    const grouped = groupByPeriod(filteredData, period, groupBy);
-
-    // Sort periods chronologically
-    const sortedPeriods = sortPeriods(Object.keys(grouped));
-
-    // Format results
-    const series = sortedPeriods.map(periodKey => {
-      const periodData = grouped[periodKey];
-
-      if (groupBy) {
-        return { period: periodKey, ...periodData };
-      } else {
-        return { period: periodKey, count: periodData };
+    if (parsedFilters && Object.keys(parsedFilters).length > 0) {
+      const whereClauses = [];
+      for (const [key, value] of Object.entries(parsedFilters)) {
+        if (Array.isArray(value)) {
+          whereClauses.push(`${key} IN (${value.map(() => '?').join(',')})`);
+          params.push(...value);
+        } else {
+          whereClauses.push(`${key} = ?`);
+          params.push(value);
+        }
       }
-    });
+      const whereClause = ' AND ' + whereClauses.join(' AND ');
+      sql += whereClause;
+      countSql += whereClause.replace('AND', 'WHERE');
+    }
 
-    // Create chart-ready data (limit to last 24 months for better visualization)
+    // Add GROUP BY and ORDER BY
+    if (groupBy) {
+      sql += ` GROUP BY period, groupByValue ORDER BY period`;
+    } else {
+      sql += ` GROUP BY period ORDER BY period`;
+    }
+
+    // Execute queries
+    const results = db.prepare(sql).all(...params);
+    const { total } = db.prepare(countSql).get(...params);
+
+    // Transform results into the expected format
+    let series;
+    if (groupBy) {
+      // Group by period and nest groupBy values
+      const grouped = {};
+      results.forEach(row => {
+        if (!grouped[row.period]) {
+          grouped[row.period] = {};
+        }
+        grouped[row.period][row.groupByValue] = row.count;
+      });
+
+      series = Object.keys(grouped).sort().map(periodKey => ({
+        period: periodKey,
+        ...grouped[periodKey]
+      }));
+    } else {
+      series = results;
+    }
+
+    // Create chart-ready data (limit to last 24 periods for better visualization)
     const chartData = series.slice(-24);
 
     res.json({
       period,
       groupBy: groupBy || null,
       series,
-      chartData, // Last 24 periods, ready for charts
-      total: filteredData.length
+      chartData,
+      total
     });
   } catch (error) {
     console.error('Error calculating time series:', error);
@@ -348,64 +439,122 @@ app.get('/api/datasets/:id/timeseries', (req, res) => {
 // Market insights endpoint
 app.get('/api/datasets/:id/insights', (req, res) => {
   try {
-    const { data } = loadDataset();
     const { filters } = req.query;
+    const params = [];
 
-    // Apply filters if provided
+    // Build WHERE clause for filters
+    let whereClause = '';
     const parsedFilters = parseFilters(filters);
     if (parsedFilters && parsedFilters.__parseError) {
       return res.status(400).json({ error: 'Invalid filters format' });
     }
-    const filteredData = applyFilters(data, parsedFilters);
 
-    // Calculate summary statistics
-    const totalTransactions = filteredData.length;
-    const dateRange = getDateRange(filteredData);
+    if (parsedFilters && Object.keys(parsedFilters).length > 0) {
+      const whereClauses = [];
+      for (const [key, value] of Object.entries(parsedFilters)) {
+        if (Array.isArray(value)) {
+          whereClauses.push(`${key} IN (${value.map(() => '?').join(',')})`);
+          params.push(...value);
+        } else {
+          whereClauses.push(`${key} = ?`);
+          params.push(value);
+        }
+      }
+      whereClause = ' WHERE ' + whereClauses.join(' AND ');
+    }
+
+    // Get total transactions
+    const { totalTransactions } = db.prepare(`SELECT COUNT(*) as totalTransactions FROM transactions${whereClause}`).get(...params);
+
+    // Get date range
+    const dateRangeQuery = `
+      SELECT
+        MIN(transaction_date) as start,
+        MAX(transaction_date) as end
+      FROM transactions
+      ${whereClause ? whereClause + ' AND' : 'WHERE'} transaction_date IS NOT NULL AND transaction_date != '-'
+    `;
+    const dateRange = db.prepare(dateRangeQuery).get(...params);
 
     // Property type distribution
-    const propertyTypeCounts = {};
-    filteredData.forEach(row => {
-      const type = row.property_type || 'Unknown';
-      propertyTypeCounts[type] = (propertyTypeCounts[type] || 0) + 1;
-    });
-    const propertyTypes = Object.entries(propertyTypeCounts)
-      .map(([name, count]) => ({ name, count, percentage: (count / totalTransactions * 100).toFixed(1) }))
-      .sort((a, b) => b.count - a.count);
+    const propertyTypeQuery = `
+      SELECT
+        COALESCE(property_type, 'Unknown') as name,
+        COUNT(*) as count,
+        ROUND(CAST(COUNT(*) AS FLOAT) / ${totalTransactions} * 100, 1) as percentage
+      FROM transactions
+      ${whereClause}
+      GROUP BY property_type
+      ORDER BY count DESC
+    `;
+    const propertyTypes = db.prepare(propertyTypeQuery).all(...params);
     const topPropertyType = propertyTypes[0];
 
     // Transaction type distribution
-    const transactionTypeCounts = {};
-    filteredData.forEach(row => {
-      const type = row.transaction_type || 'Unknown';
-      transactionTypeCounts[type] = (transactionTypeCounts[type] || 0) + 1;
-    });
-    const transactionTypes = Object.entries(transactionTypeCounts)
-      .map(([name, count]) => ({ name, count, percentage: (count / totalTransactions * 100).toFixed(1) }))
-      .sort((a, b) => b.count - a.count);
+    const transactionTypeQuery = `
+      SELECT
+        COALESCE(transaction_type, 'Unknown') as name,
+        COUNT(*) as count,
+        ROUND(CAST(COUNT(*) AS FLOAT) / ${totalTransactions} * 100, 1) as percentage
+      FROM transactions
+      ${whereClause}
+      GROUP BY transaction_type
+      ORDER BY count DESC
+    `;
+    const transactionTypes = db.prepare(transactionTypeQuery).all(...params);
     const topTransactionType = transactionTypes[0];
 
     // Representation distribution
-    const representedCounts = {};
-    filteredData.forEach(row => {
-      const type = row.represented || 'Unknown';
-      representedCounts[type] = (representedCounts[type] || 0) + 1;
-    });
-    const represented = Object.entries(representedCounts)
-      .map(([name, count]) => ({ name, count, percentage: (count / totalTransactions * 100).toFixed(1) }))
-      .sort((a, b) => b.count - a.count);
+    const representedQuery = `
+      SELECT
+        COALESCE(represented, 'Unknown') as name,
+        COUNT(*) as count,
+        ROUND(CAST(COUNT(*) AS FLOAT) / ${totalTransactions} * 100, 1) as percentage
+      FROM transactions
+      ${whereClause}
+      GROUP BY represented
+      ORDER BY count DESC
+    `;
+    const represented = db.prepare(representedQuery).all(...params);
 
-    // Calculate monthly trends
-    const monthlyData = groupByPeriod(filteredData, 'month');
-    const monthlyTotals = Object.values(monthlyData);
-    const monthlyAverage = Math.round(monthlyTotals.reduce((sum, val) => sum + val, 0) / monthlyTotals.length);
+    // Monthly trends
+    const monthConversion = `
+      CASE substr(transaction_date, 1, 3)
+        WHEN 'JAN' THEN '01' WHEN 'FEB' THEN '02' WHEN 'MAR' THEN '03'
+        WHEN 'APR' THEN '04' WHEN 'MAY' THEN '05' WHEN 'JUN' THEN '06'
+        WHEN 'JUL' THEN '07' WHEN 'AUG' THEN '08' WHEN 'SEP' THEN '09'
+        WHEN 'OCT' THEN '10' WHEN 'NOV' THEN '11' WHEN 'DEC' THEN '12'
+      END
+    `;
+    const monthlyQuery = `
+      SELECT
+        substr(transaction_date, -4) || '-' || ${monthConversion} as period,
+        COUNT(*) as count
+      FROM transactions
+      ${whereClause}${whereClause ? ' AND' : ' WHERE'} transaction_date IS NOT NULL AND transaction_date != '-'
+      GROUP BY period
+      ORDER BY period
+    `;
+    const monthlyData = db.prepare(monthlyQuery).all(...params);
+    const monthlyAverage = monthlyData.length > 0
+      ? Math.round(monthlyData.reduce((sum, row) => sum + row.count, 0) / monthlyData.length)
+      : 0;
 
-    // Calculate yearly growth (compare last year to previous year)
-    const yearlyData = groupByPeriod(filteredData, 'year');
-    const years = sortPeriods(Object.keys(yearlyData));
+    // Yearly growth
+    const yearlyQuery = `
+      SELECT
+        substr(transaction_date, -4) as year,
+        COUNT(*) as count
+      FROM transactions
+      ${whereClause}${whereClause ? ' AND' : ' WHERE'} transaction_date IS NOT NULL AND transaction_date != '-'
+      GROUP BY year
+      ORDER BY year
+    `;
+    const yearlyData = db.prepare(yearlyQuery).all(...params);
     let yearlyGrowth = 0;
-    if (years.length >= 2) {
-      const lastYear = yearlyData[years[years.length - 1]];
-      const prevYear = yearlyData[years[years.length - 2]];
+    if (yearlyData.length >= 2) {
+      const lastYear = yearlyData[yearlyData.length - 1].count;
+      const prevYear = yearlyData[yearlyData.length - 2].count;
       yearlyGrowth = ((lastYear - prevYear) / prevYear * 100).toFixed(1);
     }
 
@@ -435,92 +584,151 @@ app.get('/api/datasets/:id/insights', (req, res) => {
 // Top agents ranking endpoint
 app.get('/api/datasets/:id/agents/top', (req, res) => {
   try {
-    const { data } = loadDataset();
     const { limit = 100, filters, search } = req.query;
+    const params = [];
 
-    // Apply filters if provided
+    // Build WHERE clause for filters
+    let whereClause = 'WHERE salesperson_reg_num IS NOT NULL AND salesperson_reg_num != \'-\' AND salesperson_reg_num != \'\'';
     const parsedFilters = parseFilters(filters);
     if (parsedFilters && parsedFilters.__parseError) {
       return res.status(400).json({ error: 'Invalid filters format' });
     }
-    const filteredData = applyFilters(data, parsedFilters);
 
-    // Aggregate by agent (exclude entries with missing/invalid agent info)
-    const agentStats = {};
-    filteredData.forEach(row => {
-      const agentKey = row.salesperson_reg_num;
-
-      // Skip rows where agent information is missing or invalid
-      if (!agentKey || agentKey === '-' || agentKey.trim() === '') {
-        return;
+    if (parsedFilters && Object.keys(parsedFilters).length > 0) {
+      const whereClauses = [];
+      for (const [key, value] of Object.entries(parsedFilters)) {
+        if (Array.isArray(value)) {
+          whereClauses.push(`${key} IN (${value.map(() => '?').join(',')})`);
+          params.push(...value);
+        } else {
+          whereClauses.push(`${key} = ?`);
+          params.push(value);
+        }
       }
-      if (!agentStats[agentKey]) {
-        agentStats[agentKey] = {
-          name: row.salesperson_name,
-          regNum: row.salesperson_reg_num,
-          totalTransactions: 0,
-          propertyTypes: {},
-          transactionTypes: {},
-          representation: {},
-          towns: {},
-          districts: {}
-        };
-      }
-
-      const agent = agentStats[agentKey];
-      agent.totalTransactions++;
-      agent.propertyTypes[row.property_type] = (agent.propertyTypes[row.property_type] || 0) + 1;
-      agent.transactionTypes[row.transaction_type] = (agent.transactionTypes[row.transaction_type] || 0) + 1;
-      agent.representation[row.represented] = (agent.representation[row.represented] || 0) + 1;
-      if (row.town !== '-') agent.towns[row.town] = (agent.towns[row.town] || 0) + 1;
-      if (row.district !== '-') agent.districts[row.district] = (agent.districts[row.district] || 0) + 1;
-    });
-
-    // Convert to array and apply search filter if provided
-    let agentsList = Object.values(agentStats)
-      .map(agent => ({
-        ...agent,
-        topPropertyType: Object.entries(agent.propertyTypes).sort((a, b) => b[1] - a[1])[0] || ['Unknown', 0],
-        topTransactionType: Object.entries(agent.transactionTypes).sort((a, b) => b[1] - a[1])[0] || ['Unknown', 0],
-        topRepresentation: Object.entries(agent.representation).sort((a, b) => b[1] - a[1])[0] || ['Unknown', 0],
-        topTown: Object.keys(agent.towns).length > 0
-          ? Object.entries(agent.towns).sort((a, b) => b[1] - a[1])[0]
-          : null
-      }));
-
-    // Apply search filter if provided
-    if (search && search.trim()) {
-      const searchLower = search.toLowerCase();
-      agentsList = agentsList.filter(agent =>
-        agent.name.toLowerCase().includes(searchLower) ||
-        agent.regNum.toLowerCase().includes(searchLower)
-      );
+      whereClause += ' AND ' + whereClauses.join(' AND ');
     }
 
-    // Sort by transaction count and limit results
-    const topAgents = agentsList
-      .sort((a, b) => b.totalTransactions - a.totalTransactions)
-      .slice(0, parseInt(limit));
+    // Add search filter if provided
+    if (search && search.trim()) {
+      whereClause += ` AND (salesperson_name LIKE ? OR salesperson_reg_num LIKE ?)`;
+      const searchPattern = `%${search}%`;
+      params.push(searchPattern, searchPattern);
+    }
+
+    // Get top agents by transaction count
+    const agentsQuery = `
+      SELECT
+        salesperson_reg_num as regNum,
+        salesperson_name as name,
+        COUNT(*) as totalTransactions
+      FROM transactions
+      ${whereClause}
+      GROUP BY salesperson_reg_num, salesperson_name
+      ORDER BY totalTransactions DESC
+      LIMIT ?
+    `;
+    params.push(parseInt(limit));
+    const topAgents = db.prepare(agentsQuery).all(...params);
+
+    // Get total unique agents count (without limit)
+    const totalAgentsQuery = `
+      SELECT COUNT(DISTINCT salesperson_reg_num) as total
+      FROM transactions
+      ${whereClause}
+    `;
+    const { total } = db.prepare(totalAgentsQuery).get(...params.slice(0, -1)); // Exclude limit param
+
+    // For each agent, get their detailed statistics
+    const agentsWithDetails = topAgents.map(agent => {
+      const agentParams = [agent.regNum];
+
+      // Build agent-specific where clause (including original filters)
+      let agentWhere = 'WHERE salesperson_reg_num = ?';
+      if (parsedFilters && Object.keys(parsedFilters).length > 0) {
+        for (const [key, value] of Object.entries(parsedFilters)) {
+          if (Array.isArray(value)) {
+            agentWhere += ` AND ${key} IN (${value.map(() => '?').join(',')})`;
+            agentParams.push(...value);
+          } else {
+            agentWhere += ` AND ${key} = ?`;
+            agentParams.push(value);
+          }
+        }
+      }
+
+      // Get top property type
+      const topPropertyType = db.prepare(`
+        SELECT property_type, COUNT(*) as count
+        FROM transactions
+        ${agentWhere}
+        GROUP BY property_type
+        ORDER BY count DESC
+        LIMIT 1
+      `).get(...agentParams);
+
+      // Get top transaction type
+      const topTransactionType = db.prepare(`
+        SELECT transaction_type, COUNT(*) as count
+        FROM transactions
+        ${agentWhere}
+        GROUP BY transaction_type
+        ORDER BY count DESC
+        LIMIT 1
+      `).get(...agentParams);
+
+      // Get top representation
+      const topRepresentation = db.prepare(`
+        SELECT represented, COUNT(*) as count
+        FROM transactions
+        ${agentWhere}
+        GROUP BY represented
+        ORDER BY count DESC
+        LIMIT 1
+      `).get(...agentParams);
+
+      // Get top town
+      const topTown = db.prepare(`
+        SELECT town, COUNT(*) as count
+        FROM transactions
+        ${agentWhere} AND town != '-'
+        GROUP BY town
+        ORDER BY count DESC
+        LIMIT 1
+      `).get(...agentParams);
+
+      return {
+        ...agent,
+        topPropertyType: topPropertyType ? [topPropertyType.property_type, topPropertyType.count] : ['Unknown', 0],
+        topTransactionType: topTransactionType ? [topTransactionType.transaction_type, topTransactionType.count] : ['Unknown', 0],
+        topRepresentation: topRepresentation ? [topRepresentation.represented, topRepresentation.count] : ['Unknown', 0],
+        topTown: topTown ? [topTown.town, topTown.count] : null,
+        propertyTypes: {},
+        transactionTypes: {},
+        representation: {},
+        towns: {},
+        districts: {}
+      };
+    });
 
     // Calculate aggregate statistics
-    const totalTransactions = topAgents.reduce((sum, a) => sum + a.totalTransactions, 0);
-    const averageTransactions = topAgents.length > 0
-      ? (totalTransactions / topAgents.length).toFixed(0)
+    const totalTransactions = agentsWithDetails.reduce((sum, a) => sum + a.totalTransactions, 0);
+    const averageTransactions = agentsWithDetails.length > 0
+      ? (totalTransactions / agentsWithDetails.length).toFixed(0)
       : 0;
 
-    const topAgentMarketShare = topAgents.length > 0 && totalTransactions > 0
-      ? ((topAgents[0].totalTransactions / totalTransactions) * 100).toFixed(1)
+    const topAgentMarketShare = agentsWithDetails.length > 0 && totalTransactions > 0
+      ? ((agentsWithDetails[0].totalTransactions / totalTransactions) * 100).toFixed(1)
       : '0.0';
 
-    const top10Transactions = topAgents.slice(0, 10).reduce((sum, a) => sum + a.totalTransactions, 0);
+    const top10Transactions = agentsWithDetails.slice(0, 10).reduce((sum, a) => sum + a.totalTransactions, 0);
     const top10MarketShare = totalTransactions > 0
       ? ((top10Transactions / totalTransactions) * 100).toFixed(1)
       : '0.0';
 
     res.json({
-      total: Object.keys(agentStats).length,
-      showing: topAgents.length,
-      agents: topAgents,
+      total,
+      showing: agentsWithDetails.length,
+      agents: agentsWithDetails,
       statistics: {
         averageTransactions: parseFloat(averageTransactions),
         topAgentMarketShare: parseFloat(topAgentMarketShare),
@@ -537,76 +745,117 @@ app.get('/api/datasets/:id/agents/top', (req, res) => {
 // Individual agent profile endpoint
 app.get('/api/datasets/:id/agents/:regNum', (req, res) => {
   try {
-    const { data } = loadDataset();
     const { regNum } = req.params;
 
-    // Filter transactions for this agent
-    const agentTransactions = data.filter(row => row.salesperson_reg_num === regNum);
+    // Get agent basic info and transaction count
+    const agentQuery = `
+      SELECT
+        salesperson_name as name,
+        salesperson_reg_num as regNum,
+        COUNT(*) as totalTransactions
+      FROM transactions
+      WHERE salesperson_reg_num = ?
+      GROUP BY salesperson_name, salesperson_reg_num
+    `;
+    const agent = db.prepare(agentQuery).get(regNum);
 
-    if (agentTransactions.length === 0) {
+    if (!agent) {
       return res.status(404).json({ error: 'Agent not found' });
     }
 
-    const agent = {
-      name: agentTransactions[0].salesperson_name,
-      regNum: regNum,
-      totalTransactions: agentTransactions.length
-    };
-
     // Get date range
-    const dateRange = getDateRange(agentTransactions);
+    const dateRangeQuery = `
+      SELECT
+        MIN(transaction_date) as start,
+        MAX(transaction_date) as end
+      FROM transactions
+      WHERE salesperson_reg_num = ?
+        AND transaction_date IS NOT NULL
+        AND transaction_date != '-'
+    `;
+    const dateRange = db.prepare(dateRangeQuery).get(regNum);
 
     // Property type breakdown
-    const propertyTypes = {};
-    agentTransactions.forEach(t => {
-      propertyTypes[t.property_type] = (propertyTypes[t.property_type] || 0) + 1;
-    });
-    const propertyTypeStats = Object.entries(propertyTypes)
-      .map(([type, count]) => ({ type, count, percentage: (count / agent.totalTransactions * 100).toFixed(1) }))
-      .sort((a, b) => b.count - a.count);
+    const propertyTypeQuery = `
+      SELECT
+        property_type as type,
+        COUNT(*) as count,
+        ROUND(CAST(COUNT(*) AS FLOAT) / ${agent.totalTransactions} * 100, 1) as percentage
+      FROM transactions
+      WHERE salesperson_reg_num = ?
+      GROUP BY property_type
+      ORDER BY count DESC
+    `;
+    const propertyTypes = db.prepare(propertyTypeQuery).all(regNum);
 
     // Transaction type breakdown
-    const transactionTypes = {};
-    agentTransactions.forEach(t => {
-      transactionTypes[t.transaction_type] = (transactionTypes[t.transaction_type] || 0) + 1;
-    });
-    const transactionTypeStats = Object.entries(transactionTypes)
-      .map(([type, count]) => ({ type, count, percentage: (count / agent.totalTransactions * 100).toFixed(1) }))
-      .sort((a, b) => b.count - a.count);
+    const transactionTypeQuery = `
+      SELECT
+        transaction_type as type,
+        COUNT(*) as count,
+        ROUND(CAST(COUNT(*) AS FLOAT) / ${agent.totalTransactions} * 100, 1) as percentage
+      FROM transactions
+      WHERE salesperson_reg_num = ?
+      GROUP BY transaction_type
+      ORDER BY count DESC
+    `;
+    const transactionTypes = db.prepare(transactionTypeQuery).all(regNum);
 
     // Representation breakdown
-    const representation = {};
-    agentTransactions.forEach(t => {
-      representation[t.represented] = (representation[t.represented] || 0) + 1;
-    });
-    const representationStats = Object.entries(representation)
-      .map(([type, count]) => ({ type, count, percentage: (count / agent.totalTransactions * 100).toFixed(1) }))
-      .sort((a, b) => b.count - a.count);
+    const representationQuery = `
+      SELECT
+        represented as type,
+        COUNT(*) as count,
+        ROUND(CAST(COUNT(*) AS FLOAT) / ${agent.totalTransactions} * 100, 1) as percentage
+      FROM transactions
+      WHERE salesperson_reg_num = ?
+      GROUP BY represented
+      ORDER BY count DESC
+    `;
+    const representation = db.prepare(representationQuery).all(regNum);
 
-    // Town distribution (top 10)
-    const towns = {};
-    agentTransactions.forEach(t => {
-      if (t.town !== '-') towns[t.town] = (towns[t.town] || 0) + 1;
-    });
-    const topTowns = Object.entries(towns)
-      .map(([town, count]) => ({ town, count, percentage: (count / agent.totalTransactions * 100).toFixed(1) }))
-      .sort((a, b) => b.count - a.count)
-      .slice(0, 10);
+    // Top 10 towns
+    const topTownsQuery = `
+      SELECT
+        town,
+        COUNT(*) as count,
+        ROUND(CAST(COUNT(*) AS FLOAT) / ${agent.totalTransactions} * 100, 1) as percentage
+      FROM transactions
+      WHERE salesperson_reg_num = ? AND town != '-'
+      GROUP BY town
+      ORDER BY count DESC
+      LIMIT 10
+    `;
+    const topTowns = db.prepare(topTownsQuery).all(regNum);
 
-    // Time series data
-    const timeSeries = groupByPeriod(agentTransactions, 'month');
-    const sortedPeriods = sortPeriods(Object.keys(timeSeries));
-    const monthlyActivity = sortedPeriods.map(period => ({
-      period,
-      count: timeSeries[period]
-    }));
+    // Monthly activity time series
+    const monthConversion = `
+      CASE substr(transaction_date, 1, 3)
+        WHEN 'JAN' THEN '01' WHEN 'FEB' THEN '02' WHEN 'MAR' THEN '03'
+        WHEN 'APR' THEN '04' WHEN 'MAY' THEN '05' WHEN 'JUN' THEN '06'
+        WHEN 'JUL' THEN '07' WHEN 'AUG' THEN '08' WHEN 'SEP' THEN '09'
+        WHEN 'OCT' THEN '10' WHEN 'NOV' THEN '11' WHEN 'DEC' THEN '12'
+      END
+    `;
+    const monthlyActivityQuery = `
+      SELECT
+        substr(transaction_date, -4) || '-' || ${monthConversion} as period,
+        COUNT(*) as count
+      FROM transactions
+      WHERE salesperson_reg_num = ?
+        AND transaction_date IS NOT NULL
+        AND transaction_date != '-'
+      GROUP BY period
+      ORDER BY period
+    `;
+    const monthlyActivity = db.prepare(monthlyActivityQuery).all(regNum);
 
     res.json({
       agent,
       dateRange,
-      propertyTypes: propertyTypeStats,
-      transactionTypes: transactionTypeStats,
-      representation: representationStats,
+      propertyTypes,
+      transactionTypes,
+      representation,
       topTowns,
       monthlyActivity
     });
@@ -636,7 +885,5 @@ app.listen(PORT, '0.0.0.0', () => {
   console.log(`API server running on http://0.0.0.0:${PORT}`);
   console.log(`Health check: http://localhost:${PORT}/health`);
   console.log(`Datasets: http://localhost:${PORT}/api/datasets`);
-
-  // Pre-load dataset into memory
-  loadDataset();
+  console.log('Using SQLite database for efficient queries');
 });
