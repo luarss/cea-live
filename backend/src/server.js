@@ -21,6 +21,7 @@ const ALLOWED_ORIGINS = [
   'http://localhost:5173', // Vite default dev server
   'http://localhost:3002', // Vite alternate port
   'http://localhost:3003', // Same origin (backend serving frontend)
+  'https://cea-viz.onrender.com', // Production domain
 ].filter(Boolean);
 
 const corsOptions = {
