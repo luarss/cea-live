@@ -624,7 +624,7 @@ app.get('/health', (req, res) => {
 // Catch-all route - serve frontend for client-side routing
 // Only used in production when frontend is built
 if (existsSync(frontendDistPath)) {
-  app.get('*', (req, res) => {
+  app.get('/*', (req, res) => {
     const indexPath = join(frontendDistPath, 'index.html');
     res.sendFile(indexPath);
   });
