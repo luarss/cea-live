@@ -4,10 +4,9 @@
   "description": "CEA-VIZ data fetching pipeline for data.gov.sg",
   "type": "module",
   "scripts": {
-    "start": "node src/main.js",
     "server": "node src/server.js",
-    "pipeline": "node src/main.js",
-    "migrate": "node src/migrate-to-sqlite.js",
+    "build": "node src/main.js",
+    "download": "node src/main.js download",
     "test": "node --test tests/*.test.js"
   },
   "dependencies": {

@@ -1,6 +1,13 @@
 import { chromium } from 'playwright';
 import axios from 'axios';
 import { parse } from 'csv-parse/sync';
+import { readFileSync, existsSync } from 'fs';
+import { join, dirname } from 'path';
+import { fileURLToPath } from 'url';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = dirname(__filename);
+const ROOT_DIR = join(__dirname, '..', '..', '..');
 
 /**
  * Fetch CSV data from data.gov.sg using Playwright to extract the S3 URL
@@ -98,11 +105,42 @@ export function parseCSV(csvString) {
 }
 
 /**
+ * Load data from local CSV file
+ * @returns {Array<Object>} - Array of parsed data rows
+ */
+export function loadLocalCSV() {
+  const csvPath = join(ROOT_DIR, 'data', 'CEASalespersonsPropertyTransactionRecordsresidential.csv');
+
+  if (!existsSync(csvPath)) {
+    throw new Error(`Local CSV file not found at ${csvPath}. Run 'npm run download' to fetch it.`);
+  }
+
+  console.log(`Loading data from local CSV: ${csvPath}`);
+  const csvContent = readFileSync(csvPath, 'utf-8');
+  const data = parseCSV(csvContent);
+
+  console.log(`Successfully loaded ${data.length} records from local CSV`);
+  return data;
+}
+
+/**
  * Main function to fetch and parse data from data.gov.sg
+ * Checks for local CSV first, falls back to download if not found
  * @param {string} datasetId - The data.gov.sg dataset ID
  * @returns {Promise<Array<Object>>} - Array of parsed data rows
  */
 export async function fetchDataWithPlaywright(datasetId) {
+  const csvPath = join(ROOT_DIR, 'data', 'CEASalespersonsPropertyTransactionRecordsresidential.csv');
+
+  // Try local CSV first
+  if (existsSync(csvPath)) {
+    console.log('Using local CSV file (skipping download)');
+    return loadLocalCSV();
+  }
+
+  // Fall back to download if local file doesn't exist
+  console.log('Local CSV not found, downloading from data.gov.sg...');
+
   // Get the S3 URL using Playwright
   const s3Url = await getS3UrlFromDataGovSG(datasetId);
 
