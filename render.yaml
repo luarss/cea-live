@@ -4,7 +4,7 @@ services:
     env: node
     region: singapore
     plan: free
-    buildCommand: git lfs install && git lfs pull && make build
+    buildCommand: make install-lfs && make build
     startCommand: make start
     envVars:
       - key: NODE_ENV
