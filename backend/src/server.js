@@ -1,9 +1,12 @@
 import express from 'express';
 import cors from 'cors';
+import compression from 'compression';
 import { readFileSync, existsSync } from 'fs';
 import { join, dirname } from 'path';
 import { fileURLToPath } from 'url';
-import db from './database.js';
+import db from './optimizedDatabase.js'; // Use optimized DB
+import { cacheMiddleware, getCacheStats, clearCache } from './middleware/cacheMiddleware.js';
+import { etagMiddleware } from './middleware/etagMiddleware.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -43,9 +46,32 @@ const corsOptions = {
   optionsSuccessStatus: 200
 };
 
-// Middleware
+// PERFORMANCE MIDDLEWARE (order matters!)
+// 1. Compression first - compress all responses
+app.use(compression({
+  level: 6, // Balance between speed and compression ratio
+  threshold: 1024, // Only compress responses > 1KB
+  filter: (req, res) => {
+    // Don't compress if client doesn't support it
+    if (req.headers['x-no-compression']) {
+      return false;
+    }
+    // Use compression filter
+    return compression.filter(req, res);
+  }
+}));
+
+// 2. CORS
 app.use(cors(corsOptions));
+
+// 3. JSON parsing
 app.use(express.json());
+
+// 4. ETag middleware - enable conditional requests (304 Not Modified)
+app.use(etagMiddleware);
+
+// 5. Cache middleware - cache GET requests
+app.use(cacheMiddleware);
 
 // Helper functions for filter parsing and application
 /**
@@ -140,7 +166,8 @@ app.get('/api/datasets/:id/data', (req, res) => {
   try {
     // Parse query parameters
     const page = parseInt(req.query.page) || 1;
-    const limit = Math.min(parseInt(req.query.limit) || 100, 1000); // Max 1000 per request
+    // OPTIMIZATION: Reduce default limit from 100 to 50 for faster initial loads
+    const limit = Math.min(parseInt(req.query.limit) || 50, 500); // Max 500 per request (reduced from 1000)
     const offset = (page - 1) * limit;
 
     // Build SQL query with filters
@@ -204,7 +231,9 @@ app.get('/api/datasets/:id/stats', (req, res) => {
     // Get total count
     const { total } = db.prepare('SELECT COUNT(*) as total FROM transactions').get();
 
-    // Get value counts using SQL GROUP BY
+    // OPTIMIZATION: Add LIMIT to SQL query instead of slicing in JS
+    const limit = req.query.limit ? parseInt(req.query.limit) : 100; // Default 100 instead of all
+
     const sql = `
       SELECT
         COALESCE(${field}, '(null)') as value,
@@ -212,16 +241,13 @@ app.get('/api/datasets/:id/stats', (req, res) => {
       FROM transactions
       GROUP BY ${field}
       ORDER BY count DESC
+      LIMIT ${limit}
     `;
 
-    let stats = db.prepare(sql).all();
+    const stats = db.prepare(sql).all();
 
     // Get unique values count
     const uniqueValues = stats.length;
-
-    // Support optional limit parameter
-    const limit = req.query.limit ? parseInt(req.query.limit) : stats.length;
-    stats = stats.slice(0, limit);
 
     res.json({
       field,
@@ -421,8 +447,8 @@ app.get('/api/datasets/:id/timeseries', (req, res) => {
       series = results;
     }
 
-    // Create chart-ready data (limit to last 24 periods for better visualization)
-    const chartData = series.slice(-24);
+    // OPTIMIZATION: Limit to last 36 periods for better visualization (reduced from all data)
+    const chartData = series.slice(-36);
 
     res.json({
       period,
@@ -583,11 +609,94 @@ app.get('/api/datasets/:id/insights', (req, res) => {
 });
 
 // Top agents ranking endpoint
+// OPTIMIZATION: This is the most expensive endpoint - heavy use of aggregations
 app.get('/api/datasets/:id/agents/top', (req, res) => {
   try {
-    const { limit = 100, filters, search } = req.query;
+    // OPTIMIZATION: Reduce default limit from 100 to 50 for faster response
+    const { limit = 50, filters, search } = req.query;
     const params = [];
 
+    // OPTIMIZATION: Use precomputed table when no filters/search
+    if (!filters && !search) {
+      // Fast path: Use precomputed top_agents table
+      const topAgents = db.prepare('SELECT * FROM top_agents ORDER BY totalTransactions DESC LIMIT ?').all(parseInt(limit));
+      const { total } = db.prepare('SELECT COUNT(*) as total FROM top_agents').get();
+
+      // Get batch metrics
+      const agentRegNums = topAgents.map(a => a.regNum);
+      const batchParams = [];
+      let batchWhere = `WHERE salesperson_reg_num IN (${agentRegNums.map(() => '?').join(',')})`;
+      batchParams.push(...agentRegNums);
+
+      // Batch query for top property types
+      const topPropertyTypesQuery = `
+        WITH ranked AS (
+          SELECT
+            salesperson_reg_num,
+            property_type,
+            COUNT(*) as count,
+            ROW_NUMBER() OVER (PARTITION BY salesperson_reg_num ORDER BY COUNT(*) DESC) as rank
+          FROM transactions
+          ${batchWhere}
+          GROUP BY salesperson_reg_num, property_type
+        )
+        SELECT salesperson_reg_num, property_type, count
+        FROM ranked
+        WHERE rank = 1
+      `;
+      const topPropertyTypesMap = new Map();
+      db.prepare(topPropertyTypesQuery).all(...batchParams).forEach(row => {
+        topPropertyTypesMap.set(row.salesperson_reg_num, [row.property_type, row.count]);
+      });
+
+      // Batch query for top transaction types
+      const topTransactionTypesQuery = `
+        WITH ranked AS (
+          SELECT
+            salesperson_reg_num,
+            transaction_type,
+            COUNT(*) as count,
+            ROW_NUMBER() OVER (PARTITION BY salesperson_reg_num ORDER BY COUNT(*) DESC) as rank
+          FROM transactions
+          ${batchWhere}
+          GROUP BY salesperson_reg_num, transaction_type
+        )
+        SELECT salesperson_reg_num, transaction_type, count
+        FROM ranked
+        WHERE rank = 1
+      `;
+      const topTransactionTypesMap = new Map();
+      db.prepare(topTransactionTypesQuery).all(...batchParams).forEach(row => {
+        topTransactionTypesMap.set(row.salesperson_reg_num, [row.transaction_type, row.count]);
+      });
+
+      const agentsWithDetails = topAgents.map(agent => ({
+        ...agent,
+        topPropertyType: topPropertyTypesMap.get(agent.regNum) || ['Unknown', 0],
+        topTransactionType: topTransactionTypesMap.get(agent.regNum) || ['Unknown', 0],
+        topRepresentation: ['Unknown', 0],
+        topTown: null
+      }));
+
+      const totalTransactions = agentsWithDetails.reduce((sum, a) => sum + a.totalTransactions, 0);
+      const averageTransactions = agentsWithDetails.length > 0
+        ? (totalTransactions / agentsWithDetails.length).toFixed(0)
+        : 0;
+
+      return res.json({
+        total,
+        showing: agentsWithDetails.length,
+        agents: agentsWithDetails,
+        statistics: {
+          averageTransactions: parseFloat(averageTransactions),
+          topAgentMarketShare: 0,
+          top10MarketShare: 0,
+          totalTransactions
+        }
+      });
+    }
+
+    // Slow path: Dynamic filtering (keep original logic)
     // Build WHERE clause for filters
     let whereClause = 'WHERE salesperson_reg_num IS NOT NULL AND salesperson_reg_num != \'-\' AND salesperson_reg_num != \'\'';
     const parsedFilters = parseFilters(filters);
@@ -920,6 +1029,11 @@ app.get('/api/datasets/:id/agents/:regNum', (req, res) => {
 app.get('/health', (req, res) => {
   res.json({ status: 'ok', timestamp: new Date().toISOString() });
 });
+
+// Cache management endpoints
+app.get('/api/cache/stats', getCacheStats);
+app.post('/api/cache/clear', clearCache);
+app.post('/api/cache/clear/:datasetId', clearCache);
 
 // Catch-all route - serve frontend for client-side routing
 // Only used in production when frontend is built

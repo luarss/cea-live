@@ -38,3 +38,14 @@ start:
 .PHONY: download
 download:
 	@cd backend && npm run download
+
+# Benchmarking
+.PHONY: benchmark
+benchmark:
+	@docker compose -f docker-compose.benchmark.yml up --build --abort-on-container-exit
+	@docker compose -f docker-compose.benchmark.yml down
+
+.PHONY: benchmark-clean
+benchmark-clean:
+	@docker compose -f docker-compose.benchmark.yml down -v --remove-orphans
+	@rm -rf benchmark-results

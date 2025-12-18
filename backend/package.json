@@ -5,13 +5,16 @@
   "type": "module",
   "scripts": {
     "server": "node src/server.js",
-    "build": "node src/main.js",
+    "build": "node src/main.js && node src/optimizeDb.js && node src/precomputeStats.js",
     "download": "node src/main.js download",
+    "optimize": "node src/optimizeDb.js && node src/precomputeStats.js",
+    "load-test": "node src/loadTest.js",
     "test": "node --test tests/*.test.js"
   },
   "dependencies": {
     "axios": "^1.13.2",
     "better-sqlite3": "^12.5.0",
+    "compression": "^1.8.1",
     "cors": "^2.8.5",
     "csv-parse": "^6.1.0",
     "express": "^5.2.1",
