@@ -4,14 +4,8 @@ services:
     env: node
     region: singapore
     plan: free
-    buildCommand: |
-      cd backend && \
-      npm install && \
-      npm run build && \
-      cd ../frontend && \
-      npm install && \
-      npm run build
-    startCommand: cd backend && npm run server
+    buildCommand: make build
+    startCommand: make start
     envVars:
       - key: NODE_ENV
         value: production
