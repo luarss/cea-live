@@ -386,7 +386,7 @@ app.get('/api/datasets/:id/timeseries', (req, res) => {
       }
       const whereClause = ' AND ' + whereClauses.join(' AND ');
       sql += whereClause;
-      countSql += whereClause.replace('AND', 'WHERE');
+      countSql += whereClause;
     }
 
     // Add GROUP BY and ORDER BY
@@ -638,70 +638,120 @@ app.get('/api/datasets/:id/agents/top', (req, res) => {
     `;
     const { total } = db.prepare(totalAgentsQuery).get(...params.slice(0, -1)); // Exclude limit param
 
-    // For each agent, get their detailed statistics
-    const agentsWithDetails = topAgents.map(agent => {
-      const agentParams = [agent.regNum];
+    // Batch query optimization: Get top metrics for all agents at once
+    // Collect all agent registration numbers
+    const agentRegNums = topAgents.map(a => a.regNum);
+    const batchParams = [];
 
-      // Build agent-specific where clause (including original filters)
-      let agentWhere = 'WHERE salesperson_reg_num = ?';
-      if (parsedFilters && Object.keys(parsedFilters).length > 0) {
-        for (const [key, value] of Object.entries(parsedFilters)) {
-          if (Array.isArray(value)) {
-            agentWhere += ` AND ${key} IN (${value.map(() => '?').join(',')})`;
-            agentParams.push(...value);
-          } else {
-            agentWhere += ` AND ${key} = ?`;
-            agentParams.push(value);
-          }
+    // Build base WHERE clause for batch queries
+    let batchWhere = `WHERE salesperson_reg_num IN (${agentRegNums.map(() => '?').join(',')})`;
+    batchParams.push(...agentRegNums);
+
+    // Add filter constraints if present
+    if (parsedFilters && Object.keys(parsedFilters).length > 0) {
+      for (const [key, value] of Object.entries(parsedFilters)) {
+        if (Array.isArray(value)) {
+          batchWhere += ` AND ${key} IN (${value.map(() => '?').join(',')})`;
+          batchParams.push(...value);
+        } else {
+          batchWhere += ` AND ${key} = ?`;
+          batchParams.push(value);
         }
       }
+    }
 
-      // Get top property type
-      const topPropertyType = db.prepare(`
-        SELECT property_type, COUNT(*) as count
+    // Batch query for top property types
+    const topPropertyTypesQuery = `
+      WITH ranked AS (
+        SELECT
+          salesperson_reg_num,
+          property_type,
+          COUNT(*) as count,
+          ROW_NUMBER() OVER (PARTITION BY salesperson_reg_num ORDER BY COUNT(*) DESC) as rank
         FROM transactions
-        ${agentWhere}
-        GROUP BY property_type
-        ORDER BY count DESC
-        LIMIT 1
-      `).get(...agentParams);
+        ${batchWhere}
+        GROUP BY salesperson_reg_num, property_type
+      )
+      SELECT salesperson_reg_num, property_type, count
+      FROM ranked
+      WHERE rank = 1
+    `;
+    const topPropertyTypesMap = new Map();
+    db.prepare(topPropertyTypesQuery).all(...batchParams).forEach(row => {
+      topPropertyTypesMap.set(row.salesperson_reg_num, [row.property_type, row.count]);
+    });
 
-      // Get top transaction type
-      const topTransactionType = db.prepare(`
-        SELECT transaction_type, COUNT(*) as count
+    // Batch query for top transaction types
+    const topTransactionTypesQuery = `
+      WITH ranked AS (
+        SELECT
+          salesperson_reg_num,
+          transaction_type,
+          COUNT(*) as count,
+          ROW_NUMBER() OVER (PARTITION BY salesperson_reg_num ORDER BY COUNT(*) DESC) as rank
         FROM transactions
-        ${agentWhere}
-        GROUP BY transaction_type
-        ORDER BY count DESC
-        LIMIT 1
-      `).get(...agentParams);
+        ${batchWhere}
+        GROUP BY salesperson_reg_num, transaction_type
+      )
+      SELECT salesperson_reg_num, transaction_type, count
+      FROM ranked
+      WHERE rank = 1
+    `;
+    const topTransactionTypesMap = new Map();
+    db.prepare(topTransactionTypesQuery).all(...batchParams).forEach(row => {
+      topTransactionTypesMap.set(row.salesperson_reg_num, [row.transaction_type, row.count]);
+    });
 
-      // Get top representation
-      const topRepresentation = db.prepare(`
-        SELECT represented, COUNT(*) as count
+    // Batch query for top representation
+    const topRepresentationQuery = `
+      WITH ranked AS (
+        SELECT
+          salesperson_reg_num,
+          represented,
+          COUNT(*) as count,
+          ROW_NUMBER() OVER (PARTITION BY salesperson_reg_num ORDER BY COUNT(*) DESC) as rank
         FROM transactions
-        ${agentWhere}
-        GROUP BY represented
-        ORDER BY count DESC
-        LIMIT 1
-      `).get(...agentParams);
+        ${batchWhere}
+        GROUP BY salesperson_reg_num, represented
+      )
+      SELECT salesperson_reg_num, represented, count
+      FROM ranked
+      WHERE rank = 1
+    `;
+    const topRepresentationMap = new Map();
+    db.prepare(topRepresentationQuery).all(...batchParams).forEach(row => {
+      topRepresentationMap.set(row.salesperson_reg_num, [row.represented, row.count]);
+    });
 
-      // Get top town
-      const topTown = db.prepare(`
-        SELECT town, COUNT(*) as count
+    // Batch query for top towns (excluding '-')
+    const topTownsQuery = `
+      WITH ranked AS (
+        SELECT
+          salesperson_reg_num,
+          town,
+          COUNT(*) as count,
+          ROW_NUMBER() OVER (PARTITION BY salesperson_reg_num ORDER BY COUNT(*) DESC) as rank
         FROM transactions
-        ${agentWhere} AND town != '-'
-        GROUP BY town
-        ORDER BY count DESC
-        LIMIT 1
-      `).get(...agentParams);
+        ${batchWhere} AND town != '-'
+        GROUP BY salesperson_reg_num, town
+      )
+      SELECT salesperson_reg_num, town, count
+      FROM ranked
+      WHERE rank = 1
+    `;
+    const topTownsMap = new Map();
+    db.prepare(topTownsQuery).all(...batchParams).forEach(row => {
+      topTownsMap.set(row.salesperson_reg_num, [row.town, row.count]);
+    });
 
+    // Map results back to agents
+    const agentsWithDetails = topAgents.map(agent => {
       return {
         ...agent,
-        topPropertyType: topPropertyType ? [topPropertyType.property_type, topPropertyType.count] : ['Unknown', 0],
-        topTransactionType: topTransactionType ? [topTransactionType.transaction_type, topTransactionType.count] : ['Unknown', 0],
-        topRepresentation: topRepresentation ? [topRepresentation.represented, topRepresentation.count] : ['Unknown', 0],
-        topTown: topTown ? [topTown.town, topTown.count] : null,
+        topPropertyType: topPropertyTypesMap.get(agent.regNum) || ['Unknown', 0],
+        topTransactionType: topTransactionTypesMap.get(agent.regNum) || ['Unknown', 0],
+        topRepresentation: topRepresentationMap.get(agent.regNum) || ['Unknown', 0],
+        topTown: topTownsMap.get(agent.regNum) || null,
         propertyTypes: {},
         transactionTypes: {},
         representation: {},

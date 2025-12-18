@@ -9,9 +9,6 @@ const ROOT_DIR = join(__dirname, '..', '..');
 const dbPath = join(ROOT_DIR, 'data', 'processed', 'cea-transactions.db');
 const db = new Database(dbPath, { readonly: true });
 
-// Enable WAL mode for better read performance
-db.pragma('journal_mode = WAL');
-
 console.log('Connected to SQLite database');
 
 export default db;
