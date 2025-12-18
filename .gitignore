@@ -5,6 +5,7 @@ pipeline/node_modules/
 # Build outputs
 dist/
 .vite/
+bin/
 
 # Data
 data/raw/

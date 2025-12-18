@@ -10,6 +10,16 @@ install-backend:
 install-frontend:
 	@cd frontend && npm install
 
+.PHONY: install-lfs
+install-lfs:
+	@echo "Installing Git LFS..."
+	@curl -L https://github.com/git-lfs/git-lfs/releases/download/v3.4.1/git-lfs-linux-amd64-v3.4.1.tar.gz | tar xz
+	@mkdir -p ./bin
+	@mv git-lfs-3.4.1/git-lfs ./bin/
+	@rm -rf git-lfs-3.4.1
+	@./bin/git-lfs install --force
+	@./bin/git-lfs pull
+
 # Development
 .PHONY: dev
 dev:
