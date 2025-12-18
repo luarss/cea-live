@@ -1,0 +1,19 @@
+services:
+  cea-viz-benchmark:
+    build:
+      context: .
+      dockerfile: Dockerfile.benchmark
+    container_name: cea-viz-512mb-test
+    mem_limit: 512m
+    mem_reservation: 512m
+    memswap_limit: 512m  # Prevent using swap
+    cpus: 0.1  # Render free tier CPU
+    ports:
+      - "3003:3003"
+    environment:
+      - NODE_ENV=production
+      - PORT=3003
+    volumes:
+      - ./benchmark-results:/app/benchmark-results
+    # Override default OOM behavior to get better error reporting
+    oom_kill_disable: false
