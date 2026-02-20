@@ -37,9 +37,6 @@ jobs:
       - name: Install dependencies
         run: make install-backend
 
-      - name: Install Playwright browsers
-        run: cd backend && npx playwright install --with-deps chromium
-
       - name: Download fresh data
         run: make download
         env:

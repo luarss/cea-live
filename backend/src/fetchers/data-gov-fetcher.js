@@ -1,4 +1,3 @@
-import { chromium } from 'playwright';
 import axios from 'axios';
 import { parse } from 'csv-parse/sync';
 import { readFileSync, existsSync } from 'fs';
@@ -15,49 +14,13 @@ const ROOT_DIR = join(__dirname, '..', '..', '..');
  * @returns {Promise<string>} - The S3 URL for the CSV file
  */
 export async function getS3UrlFromDataGovSG(datasetId) {
-  const browser = await chromium.launch({ headless: true });
-  const page = await browser.newPage();
-
-  try {
-    const url = `https://data.gov.sg/datasets/${datasetId}/view`;
-    console.log(`Navigating to ${url}`);
-
-    // Listen for console messages to capture the download URL
-    let downloadUrl = null;
-    page.on('console', (msg) => {
-      const text = msg.text();
-      if (text.includes('download-url')) {
-        // Extract the URL from the console log
-        const urlMatch = text.match(/(https:\/\/s3[^\s]+)/);
-        if (urlMatch) {
-          downloadUrl = urlMatch[1];
-        }
-      }
-    });
-
-    await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 60000 });
-
-    // Wait for the download button to be visible
-    console.log('Waiting for download button...');
-    await page.waitForSelector('button:has-text("Download CSV")', { timeout: 30000 });
-
-    // Click the download button
-    console.log('Clicking download button...');
-    await page.click('button:has-text("Download CSV")');
-
-    // Wait for the console log to appear
-    await page.waitForTimeout(3000);
-
-    if (!downloadUrl) {
-      throw new Error('Failed to extract S3 URL from page');
-    }
-
-    console.log(`Extracted S3 URL: ${downloadUrl.substring(0, 100)}...`);
-    return downloadUrl;
-
-  } finally {
-    await browser.close();
-  }
+  const apiUrl = `https://api-open.data.gov.sg/v1/public/api/datasets/${datasetId}/poll-download`;
+  console.log(`Fetching S3 URL from data.gov.sg API...`);
+  const response = await axios.get(apiUrl);
+  const url = response.data?.data?.url;
+  if (!url) throw new Error('Failed to extract S3 URL from data.gov.sg API');
+  console.log(`Extracted S3 URL: ${url.substring(0, 100)}...`);
+  return url;
 }
 
 /**

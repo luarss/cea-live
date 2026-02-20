@@ -2,7 +2,7 @@ import { readFileSync, writeFileSync, mkdirSync, existsSync } from 'fs';
 import { join, dirname } from 'path';
 import { fileURLToPath } from 'url';
 import Database from 'better-sqlite3';
-import { fetchDataWithPlaywright, getS3UrlFromDataGovSG, downloadCSVFromS3 } from './fetchers/playwright-fetcher.js';
+import { fetchDataWithPlaywright, getS3UrlFromDataGovSG, downloadCSVFromS3 } from './fetchers/data-gov-fetcher.js';
 import logger from './utils/logger.js';
 import { analyzeSchema } from './utils/schemaAnalyzer.js';
 import { generateVisualizationRecommendations } from './utils/vizRecommender.js';
@@ -17,7 +17,7 @@ async function processDataset(config) {
   logger.log(`Processing dataset: ${name} (${id})`);
 
   try {
-    // Fetch data using Playwright
+    // Fetch data from data.gov.sg
     logger.log(`Fetching data from data.gov.sg (dataset: ${source.resourceId})`);
     const rawData = await fetchDataWithPlaywright(source.resourceId);
 
