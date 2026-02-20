@@ -9,14 +9,17 @@ const __dirname = dirname(__filename);
 const ROOT_DIR = join(__dirname, '..', '..', '..');
 
 /**
- * Fetch CSV data from data.gov.sg using Playwright to extract the S3 URL
+ * Fetch CSV data from data.gov.sg using the v2 API (with key) or v1 fallback
  * @param {string} datasetId - The data.gov.sg dataset ID
  * @returns {Promise<string>} - The S3 URL for the CSV file
  */
 export async function getS3UrlFromDataGovSG(datasetId) {
+  const apiKey = process.env.DATA_GOV_API_KEY;
+  const headers = apiKey ? { 'x-api-key': apiKey } : {};
   const apiUrl = `https://api-open.data.gov.sg/v1/public/api/datasets/${datasetId}/poll-download`;
-  console.log(`Fetching S3 URL from data.gov.sg API...`);
-  const response = await axios.get(apiUrl);
+
+  console.log(`Fetching S3 URL from data.gov.sg API${apiKey ? ' (authenticated)' : ''}...`);
+  const response = await axios.get(apiUrl, { headers });
   const url = response.data?.data?.url;
   if (!url) throw new Error('Failed to extract S3 URL from data.gov.sg API');
   console.log(`Extracted S3 URL: ${url.substring(0, 100)}...`);
