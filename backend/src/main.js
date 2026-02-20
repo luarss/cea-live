@@ -1,6 +1,7 @@
 import { readFileSync, writeFileSync, mkdirSync, existsSync } from 'fs';
 import { join, dirname } from 'path';
 import { fileURLToPath } from 'url';
+import { config as dotenvConfig } from 'dotenv';
 import Database from 'better-sqlite3';
 import { fetchDataWithPlaywright, getS3UrlFromDataGovSG, downloadCSVFromS3 } from './fetchers/data-gov-fetcher.js';
 import logger from './utils/logger.js';
@@ -10,6 +11,8 @@ import { generateVisualizationRecommendations } from './utils/vizRecommender.js'
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 const ROOT_DIR = join(__dirname, '..', '..');
+
+dotenvConfig({ path: join(ROOT_DIR, '.env') });
 
 async function processDataset(config) {
   const { id, name, source } = config;
