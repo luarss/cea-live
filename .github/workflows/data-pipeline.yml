@@ -41,6 +41,7 @@ jobs:
         run: make download
         env:
           NODE_ENV: production
+          DATA_GOV_API_KEY: ${{ secrets.DATA_GOV_API_KEY }}
 
       - name: Commit raw data changes
         uses: stefanzweifel/git-auto-commit-action@v5
