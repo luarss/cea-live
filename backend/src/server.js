@@ -120,7 +120,14 @@ if (existsSync(frontendDistPath)) {
 }
 
 // SQLite helper functions
+// Metadata is build-time constant, so it's computed once and reused across
+// requests instead of re-querying and re-parsing it every call.
+let cachedMetadata = null;
 function getMetadata() {
+  if (cachedMetadata) {
+    return cachedMetadata;
+  }
+
   const metaRows = db.prepare('SELECT key, value FROM metadata').all();
   const meta = {};
   for (const row of metaRows) {
@@ -130,7 +137,7 @@ function getMetadata() {
       meta[row.key] = row.value;
     }
   }
-  return {
+  cachedMetadata = {
     id: meta.id,
     name: meta.name,
     description: meta.description,
@@ -138,17 +145,25 @@ function getMetadata() {
     schema: meta.schema,
     visualizationRecommendations: meta.visualizationRecommendations
   };
+  return cachedMetadata;
 }
 
 
 // Routes
 
+// Datasets catalog is build-time constant; load it lazily on first request
+// and reuse it thereafter instead of re-reading/re-parsing the file every
+// call. A failed read is not cached, so it's retried on the next request.
+let cachedDatasets = null;
+
 // Get datasets list
 app.get('/api/datasets', (req, res) => {
   try {
-    const datasetsPath = join(ROOT_DIR, 'data', 'processed', 'datasets.json');
-    const datasets = JSON.parse(readFileSync(datasetsPath, 'utf-8'));
-    res.json(datasets);
+    if (!cachedDatasets) {
+      const datasetsPath = join(ROOT_DIR, 'data', 'processed', 'datasets.json');
+      cachedDatasets = JSON.parse(readFileSync(datasetsPath, 'utf-8'));
+    }
+    res.json(cachedDatasets);
   } catch (error) {
     console.error('Error loading datasets:', error);
     res.status(500).json({ error: 'Failed to load datasets' });
