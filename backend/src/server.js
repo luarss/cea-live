@@ -66,6 +66,51 @@ function parseFilters(filtersString) {
   }
 }
 
+// Columns that may be safely interpolated into SQL (filter keys, GROUP BY
+// fields, dimensions). Every such value from the query string must be
+// checked against this set before it touches a query string.
+const ALLOWED_COLUMNS = new Set([
+  'salesperson_name',
+  'transaction_date',
+  'salesperson_reg_num',
+  'property_type',
+  'transaction_type',
+  'represented',
+  'town',
+  'district',
+  'general_location'
+]);
+
+/**
+ * Build parameterized SQL filter conditions from a parsed filters object,
+ * validating every field name against ALLOWED_COLUMNS.
+ * @param {Object|null} parsedFilters
+ * @returns {{conditions: string|null, params: Array, invalidField: string|null}}
+ */
+function buildFilterConditions(parsedFilters) {
+  if (!parsedFilters || Object.keys(parsedFilters).length === 0) {
+    return { conditions: null, params: [], invalidField: null };
+  }
+
+  const clauses = [];
+  const params = [];
+
+  for (const [key, value] of Object.entries(parsedFilters)) {
+    if (!ALLOWED_COLUMNS.has(key)) {
+      return { conditions: null, params: [], invalidField: key };
+    }
+    if (Array.isArray(value)) {
+      clauses.push(`${key} IN (${value.map(() => '?').join(',')})`);
+      params.push(...value);
+    } else {
+      clauses.push(`${key} = ?`);
+      params.push(value);
+    }
+  }
+
+  return { conditions: clauses.join(' AND '), params, invalidField: null };
+}
+
 
 // Serve frontend static files in production
 const frontendDistPath = join(ROOT_DIR, 'frontend', 'dist');
@@ -146,7 +191,6 @@ app.get('/api/datasets/:id/data', (req, res) => {
     // Build SQL query with filters
     let sql = 'SELECT * FROM transactions';
     let countSql = 'SELECT COUNT(*) as total FROM transactions';
-    const params = [];
 
     // Apply filters if provided
     const parsedFilters = parseFilters(req.query.filters);
@@ -154,18 +198,13 @@ app.get('/api/datasets/:id/data', (req, res) => {
       return res.status(400).json({ error: 'Invalid filters format' });
     }
 
-    if (parsedFilters && Object.keys(parsedFilters).length > 0) {
-      const whereClauses = [];
-      for (const [key, value] of Object.entries(parsedFilters)) {
-        if (Array.isArray(value)) {
-          whereClauses.push(`${key} IN (${value.map(() => '?').join(',')})`);
-          params.push(...value);
-        } else {
-          whereClauses.push(`${key} = ?`);
-          params.push(value);
-        }
-      }
-      const whereClause = ' WHERE ' + whereClauses.join(' AND ');
+    const { conditions, params, invalidField } = buildFilterConditions(parsedFilters);
+    if (invalidField) {
+      return res.status(400).json({ error: `Invalid filter field: ${invalidField}` });
+    }
+
+    if (conditions) {
+      const whereClause = ' WHERE ' + conditions;
       sql += whereClause;
       countSql += whereClause;
     }
@@ -200,12 +239,22 @@ app.get('/api/datasets/:id/stats', (req, res) => {
     if (!field) {
       return res.status(400).json({ error: 'Field parameter is required' });
     }
+    if (!ALLOWED_COLUMNS.has(field)) {
+      return res.status(400).json({ error: `Invalid field: ${field}` });
+    }
 
     // Get total count
     const { total } = db.prepare('SELECT COUNT(*) as total FROM transactions').get();
 
-    // Get value counts using SQL GROUP BY
-    const sql = `
+    // Get unique values count without materializing every group
+    const { uniqueValues } = db.prepare(`
+      SELECT COUNT(DISTINCT COALESCE(${field}, '(null)')) as uniqueValues
+      FROM transactions
+    `).get();
+
+    // Get value counts using SQL GROUP BY, with LIMIT applied in SQL
+    // rather than after fetching every group into memory
+    let sql = `
       SELECT
         COALESCE(${field}, '(null)') as value,
         COUNT(*) as count
@@ -213,15 +262,13 @@ app.get('/api/datasets/:id/stats', (req, res) => {
       GROUP BY ${field}
       ORDER BY count DESC
     `;
+    const sqlParams = [];
+    if (req.query.limit) {
+      sql += ' LIMIT ?';
+      sqlParams.push(parseInt(req.query.limit));
+    }
 
-    let stats = db.prepare(sql).all();
-
-    // Get unique values count
-    const uniqueValues = stats.length;
-
-    // Support optional limit parameter
-    const limit = req.query.limit ? parseInt(req.query.limit) : stats.length;
-    stats = stats.slice(0, limit);
+    const stats = db.prepare(sql).all(...sqlParams);
 
     res.json({
       field,
@@ -243,9 +290,14 @@ app.get('/api/datasets/:id/analytics', (req, res) => {
     if (!dimension1) {
       return res.status(400).json({ error: 'dimension1 parameter is required' });
     }
+    if (!ALLOWED_COLUMNS.has(dimension1)) {
+      return res.status(400).json({ error: `Invalid dimension1: ${dimension1}` });
+    }
+    if (dimension2 && !ALLOWED_COLUMNS.has(dimension2)) {
+      return res.status(400).json({ error: `Invalid dimension2: ${dimension2}` });
+    }
 
     // Build SQL query
-    const params = [];
     let sql, countSql;
 
     if (dimension2) {
@@ -273,18 +325,13 @@ app.get('/api/datasets/:id/analytics', (req, res) => {
       return res.status(400).json({ error: 'Invalid filters format' });
     }
 
-    if (parsedFilters && Object.keys(parsedFilters).length > 0) {
-      const whereClauses = [];
-      for (const [key, value] of Object.entries(parsedFilters)) {
-        if (Array.isArray(value)) {
-          whereClauses.push(`${key} IN (${value.map(() => '?').join(',')})`);
-          params.push(...value);
-        } else {
-          whereClauses.push(`${key} = ?`);
-          params.push(value);
-        }
-      }
-      const whereClause = ' WHERE ' + whereClauses.join(' AND ');
+    const { conditions, params, invalidField } = buildFilterConditions(parsedFilters);
+    if (invalidField) {
+      return res.status(400).json({ error: `Invalid filter field: ${invalidField}` });
+    }
+
+    if (conditions) {
+      const whereClause = ' WHERE ' + conditions;
       sql += whereClause;
       countSql += whereClause;
     }
@@ -329,6 +376,10 @@ app.get('/api/datasets/:id/timeseries', (req, res) => {
   try {
     const { period = 'month', groupBy, filters } = req.query;
 
+    if (groupBy && !ALLOWED_COLUMNS.has(groupBy)) {
+      return res.status(400).json({ error: `Invalid groupBy: ${groupBy}` });
+    }
+
     // Build SQL query with date parsing
     // Convert "MMM-YYYY" format to "YYYY-MM" or "YYYY"
     const monthConversion = `
@@ -344,7 +395,6 @@ app.get('/api/datasets/:id/timeseries', (req, res) => {
       ? `substr(transaction_date, -4)` // Extract "YYYY" from "MMM-YYYY"
       : `substr(transaction_date, -4) || '-' || ${monthConversion}`; // "YYYY-MM"
 
-    const params = [];
     let sql, countSql;
 
     if (groupBy) {
@@ -374,18 +424,13 @@ app.get('/api/datasets/:id/timeseries', (req, res) => {
       return res.status(400).json({ error: 'Invalid filters format' });
     }
 
-    if (parsedFilters && Object.keys(parsedFilters).length > 0) {
-      const whereClauses = [];
-      for (const [key, value] of Object.entries(parsedFilters)) {
-        if (Array.isArray(value)) {
-          whereClauses.push(`${key} IN (${value.map(() => '?').join(',')})`);
-          params.push(...value);
-        } else {
-          whereClauses.push(`${key} = ?`);
-          params.push(value);
-        }
-      }
-      const whereClause = ' AND ' + whereClauses.join(' AND ');
+    const { conditions, params, invalidField } = buildFilterConditions(parsedFilters);
+    if (invalidField) {
+      return res.status(400).json({ error: `Invalid filter field: ${invalidField}` });
+    }
+
+    if (conditions) {
+      const whereClause = ' AND ' + conditions;
       sql += whereClause;
       countSql += whereClause;
     }
@@ -441,28 +486,18 @@ app.get('/api/datasets/:id/timeseries', (req, res) => {
 app.get('/api/datasets/:id/insights', (req, res) => {
   try {
     const { filters } = req.query;
-    const params = [];
 
     // Build WHERE clause for filters
-    let whereClause = '';
     const parsedFilters = parseFilters(filters);
     if (parsedFilters && parsedFilters.__parseError) {
       return res.status(400).json({ error: 'Invalid filters format' });
     }
 
-    if (parsedFilters && Object.keys(parsedFilters).length > 0) {
-      const whereClauses = [];
-      for (const [key, value] of Object.entries(parsedFilters)) {
-        if (Array.isArray(value)) {
-          whereClauses.push(`${key} IN (${value.map(() => '?').join(',')})`);
-          params.push(...value);
-        } else {
-          whereClauses.push(`${key} = ?`);
-          params.push(value);
-        }
-      }
-      whereClause = ' WHERE ' + whereClauses.join(' AND ');
+    const { conditions, params, invalidField } = buildFilterConditions(parsedFilters);
+    if (invalidField) {
+      return res.status(400).json({ error: `Invalid filter field: ${invalidField}` });
     }
+    const whereClause = conditions ? ' WHERE ' + conditions : '';
 
     // Get total transactions
     const { totalTransactions } = db.prepare(`SELECT COUNT(*) as totalTransactions FROM transactions${whereClause}`).get(...params);
@@ -586,7 +621,6 @@ app.get('/api/datasets/:id/insights', (req, res) => {
 app.get('/api/datasets/:id/agents/top', (req, res) => {
   try {
     const { limit = 100, filters, search } = req.query;
-    const params = [];
 
     // Build WHERE clause for filters
     let whereClause = 'WHERE salesperson_reg_num IS NOT NULL AND salesperson_reg_num != \'-\' AND salesperson_reg_num != \'\'';
@@ -595,18 +629,12 @@ app.get('/api/datasets/:id/agents/top', (req, res) => {
       return res.status(400).json({ error: 'Invalid filters format' });
     }
 
-    if (parsedFilters && Object.keys(parsedFilters).length > 0) {
-      const whereClauses = [];
-      for (const [key, value] of Object.entries(parsedFilters)) {
-        if (Array.isArray(value)) {
-          whereClauses.push(`${key} IN (${value.map(() => '?').join(',')})`);
-          params.push(...value);
-        } else {
-          whereClauses.push(`${key} = ?`);
-          params.push(value);
-        }
-      }
-      whereClause += ' AND ' + whereClauses.join(' AND ');
+    const { conditions, params, invalidField } = buildFilterConditions(parsedFilters);
+    if (invalidField) {
+      return res.status(400).json({ error: `Invalid filter field: ${invalidField}` });
+    }
+    if (conditions) {
+      whereClause += ' AND ' + conditions;
     }
 
     // Add search filter if provided
@@ -648,17 +676,12 @@ app.get('/api/datasets/:id/agents/top', (req, res) => {
     let batchWhere = `WHERE salesperson_reg_num IN (${agentRegNums.map(() => '?').join(',')})`;
     batchParams.push(...agentRegNums);
 
-    // Add filter constraints if present
-    if (parsedFilters && Object.keys(parsedFilters).length > 0) {
-      for (const [key, value] of Object.entries(parsedFilters)) {
-        if (Array.isArray(value)) {
-          batchWhere += ` AND ${key} IN (${value.map(() => '?').join(',')})`;
-          batchParams.push(...value);
-        } else {
-          batchWhere += ` AND ${key} = ?`;
-          batchParams.push(value);
-        }
-      }
+    // Add filter constraints if present (fields already validated against
+    // ALLOWED_COLUMNS above; rebuild params fresh since `params` above also
+    // carries the search/limit values which don't belong here)
+    if (conditions) {
+      batchWhere += ' AND ' + conditions;
+      batchParams.push(...buildFilterConditions(parsedFilters).params);
     }
 
     // Batch query for top property types
