@@ -136,6 +136,11 @@ async function streamCSVIntoSQLite(config) {
     CREATE INDEX idx_salesperson_reg_num ON transactions(salesperson_reg_num);
     CREATE INDEX idx_town ON transactions(town);
     CREATE INDEX idx_transaction_type ON transactions(transaction_type);
+    CREATE INDEX idx_salesperson_name ON transactions(salesperson_name);
+    CREATE INDEX idx_represented ON transactions(represented);
+    CREATE INDEX idx_district ON transactions(district);
+    CREATE INDEX idx_general_location ON transactions(general_location);
+    CREATE INDEX idx_agent_reg_name ON transactions(salesperson_reg_num, salesperson_name);
   `);
 
   // Analyze schema and generate viz recommendations from a sample, not the full dataset
