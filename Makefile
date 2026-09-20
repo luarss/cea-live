@@ -28,12 +28,12 @@ dev:
 .PHONY: build
 build:
 	@cd backend && npm install
-	@cd backend && npm run build
+	@cd backend && NODE_OPTIONS=--max-old-space-size=512 npm run build
 	@cd frontend && npm install && npm run build
 
 .PHONY: start
 start:
-	@cd backend && npm run server
+	@cd backend && NODE_OPTIONS=--max-old-space-size=400 npm run server
 
 .PHONY: download
 download:
