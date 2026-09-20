@@ -419,20 +419,12 @@ app.get('/api/datasets/:id/timeseries', (req, res) => {
       ? Math.min(Math.max(parsedSeriesLimit, 1), MAX_SERIES_CEILING)
       : MAX_SERIES;
 
-    // Build SQL query with date parsing
-    // Convert "MMM-YYYY" format to "YYYY-MM" or "YYYY"
-    const monthConversion = `
-      CASE substr(transaction_date, 1, 3)
-        WHEN 'JAN' THEN '01' WHEN 'FEB' THEN '02' WHEN 'MAR' THEN '03'
-        WHEN 'APR' THEN '04' WHEN 'MAY' THEN '05' WHEN 'JUN' THEN '06'
-        WHEN 'JUL' THEN '07' WHEN 'AUG' THEN '08' WHEN 'SEP' THEN '09'
-        WHEN 'OCT' THEN '10' WHEN 'NOV' THEN '11' WHEN 'DEC' THEN '12'
-      END
-    `;
-
+    // period_month is precomputed as "YYYY-MM" at build time (see main.js),
+    // so grouping by it is a plain indexed GROUP BY instead of a per-row
+    // CASE/substr expression over transaction_date.
     const periodExpression = period === 'year'
-      ? `substr(transaction_date, -4)` // Extract "YYYY" from "MMM-YYYY"
-      : `substr(transaction_date, -4) || '-' || ${monthConversion}`; // "YYYY-MM"
+      ? `substr(period_month, 1, 4)` // Extract "YYYY" from "YYYY-MM"
+      : `period_month`;
 
     // Apply filters if provided (computed up-front since the top-N query
     // below, when groupBy is present, needs the same WHERE conditions).
@@ -456,7 +448,7 @@ app.get('/api/datasets/:id/timeseries', (req, res) => {
       let topSql = `
         SELECT ${groupBy} as groupByValue, COUNT(*) as cnt
         FROM transactions
-        WHERE transaction_date IS NOT NULL AND transaction_date != '-'
+        WHERE period_month IS NOT NULL
       `;
       const topParams = [...params];
       if (conditions) {
@@ -475,18 +467,18 @@ app.get('/api/datasets/:id/timeseries', (req, res) => {
           CASE WHEN ${groupBy} IN (${inPlaceholders}) THEN COALESCE(${groupBy}, 'Unknown') ELSE 'Other' END as groupByValue,
           COUNT(*) as count
         FROM transactions
-        WHERE transaction_date IS NOT NULL AND transaction_date != '-'
+        WHERE period_month IS NOT NULL
       `;
-      countSql = `SELECT COUNT(*) as total FROM transactions WHERE transaction_date IS NOT NULL AND transaction_date != '-'`;
+      countSql = `SELECT COUNT(*) as total FROM transactions WHERE period_month IS NOT NULL`;
     } else {
       sql = `
         SELECT
           ${periodExpression} as period,
           COUNT(*) as count
         FROM transactions
-        WHERE transaction_date IS NOT NULL AND transaction_date != '-'
+        WHERE period_month IS NOT NULL
       `;
-      countSql = `SELECT COUNT(*) as total FROM transactions WHERE transaction_date IS NOT NULL AND transaction_date != '-'`;
+      countSql = `SELECT COUNT(*) as total FROM transactions WHERE period_month IS NOT NULL`;
     }
 
     if (conditions) {

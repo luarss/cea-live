@@ -5,6 +5,7 @@ import { config as dotenvConfig } from 'dotenv';
 import Database from 'better-sqlite3';
 import { parse } from 'csv-parse';
 import { getS3UrlFromDataGovSG, downloadCSVFromS3 } from './fetchers/data-gov-fetcher.js';
+import { parseTransactionDate } from './utils/dateParser.js';
 import logger from './utils/logger.js';
 import { analyzeSchema } from './utils/schemaAnalyzer.js';
 import { generateVisualizationRecommendations } from './utils/vizRecommender.js';
@@ -51,7 +52,8 @@ async function streamCSVIntoSQLite(config) {
       represented TEXT,
       town TEXT,
       district TEXT,
-      general_location TEXT
+      general_location TEXT,
+      period_month TEXT
     );
   `);
 
@@ -59,12 +61,17 @@ async function streamCSVIntoSQLite(config) {
     INSERT INTO transactions (
       salesperson_name, transaction_date, salesperson_reg_num,
       property_type, transaction_type, represented,
-      town, district, general_location
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+      town, district, general_location, period_month
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `);
 
   const insertBatch = db.transaction((records) => {
     for (const record of records) {
+      // Precompute the "YYYY-MM" grouping key at load time so /timeseries can
+      // GROUP BY an indexed column instead of a per-row CASE/substr expression.
+      const isoDate = parseTransactionDate(record.transaction_date);
+      const periodMonth = isoDate ? isoDate.substring(0, 7) : null;
+
       insert.run(
         record.salesperson_name || null,
         record.transaction_date || null,
@@ -74,7 +81,8 @@ async function streamCSVIntoSQLite(config) {
         record.represented || null,
         record.town || null,
         record.district || null,
-        record.general_location || null
+        record.general_location || null,
+        periodMonth
       );
     }
   });
@@ -141,6 +149,7 @@ async function streamCSVIntoSQLite(config) {
     CREATE INDEX idx_district ON transactions(district);
     CREATE INDEX idx_general_location ON transactions(general_location);
     CREATE INDEX idx_agent_reg_name ON transactions(salesperson_reg_num, salesperson_name);
+    CREATE INDEX idx_period_month ON transactions(period_month);
   `);
 
   // Analyze schema and generate viz recommendations from a sample, not the full dataset
