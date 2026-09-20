@@ -397,14 +397,27 @@ app.get('/api/datasets/:id/analytics', (req, res) => {
   }
 });
 
+// Bound the number of distinct groupBy series returned by /timeseries so a
+// high-cardinality column (e.g. salesperson_name with 32k+ distinct values)
+// can't blow up the response into tens-of-thousands-of-properties objects.
+const MAX_SERIES = 12;
+const MAX_SERIES_CEILING = 50;
+
 // Time-series analytics endpoint
 app.get('/api/datasets/:id/timeseries', (req, res) => {
   try {
-    const { period = 'month', groupBy, filters } = req.query;
+    const { period = 'month', groupBy, filters, seriesLimit } = req.query;
 
     if (groupBy && !ALLOWED_COLUMNS.has(groupBy)) {
       return res.status(400).json({ error: `Invalid groupBy: ${groupBy}` });
     }
+
+    // Clamp the requested series limit into [1, MAX_SERIES_CEILING], defaulting
+    // to MAX_SERIES when absent or not a valid number.
+    const parsedSeriesLimit = parseInt(seriesLimit, 10);
+    const effectiveSeriesLimit = Number.isFinite(parsedSeriesLimit)
+      ? Math.min(Math.max(parsedSeriesLimit, 1), MAX_SERIES_CEILING)
+      : MAX_SERIES;
 
     // Build SQL query with date parsing
     // Convert "MMM-YYYY" format to "YYYY-MM" or "YYYY"
@@ -421,13 +434,45 @@ app.get('/api/datasets/:id/timeseries', (req, res) => {
       ? `substr(transaction_date, -4)` // Extract "YYYY" from "MMM-YYYY"
       : `substr(transaction_date, -4) || '-' || ${monthConversion}`; // "YYYY-MM"
 
+    // Apply filters if provided (computed up-front since the top-N query
+    // below, when groupBy is present, needs the same WHERE conditions).
+    const parsedFilters = parseFilters(filters);
+    if (parsedFilters && parsedFilters.__parseError) {
+      return res.status(400).json({ error: 'Invalid filters format' });
+    }
+
+    const { conditions, params, invalidField } = buildFilterConditions(parsedFilters);
+    if (invalidField) {
+      return res.status(400).json({ error: `Invalid filter field: ${invalidField}` });
+    }
+
     let sql, countSql;
+    let topValues = [];
 
     if (groupBy) {
+      // Find the top-N groupBy values by total count (honoring the same
+      // filters as the main query), so the main query can fold everything
+      // else into a single 'Other' bucket and stay bounded to N+1 series.
+      let topSql = `
+        SELECT ${groupBy} as groupByValue, COUNT(*) as cnt
+        FROM transactions
+        WHERE transaction_date IS NOT NULL AND transaction_date != '-'
+      `;
+      const topParams = [...params];
+      if (conditions) {
+        topSql += ' AND ' + conditions;
+      }
+      topSql += ` GROUP BY ${groupBy} ORDER BY cnt DESC LIMIT ?`;
+      topParams.push(effectiveSeriesLimit);
+
+      const topRows = db.prepare(topSql).all(...topParams);
+      topValues = topRows.map(row => row.groupByValue);
+
+      const inPlaceholders = topValues.map(() => '?').join(',');
       sql = `
         SELECT
           ${periodExpression} as period,
-          COALESCE(${groupBy}, 'Unknown') as groupByValue,
+          CASE WHEN ${groupBy} IN (${inPlaceholders}) THEN COALESCE(${groupBy}, 'Unknown') ELSE 'Other' END as groupByValue,
           COUNT(*) as count
         FROM transactions
         WHERE transaction_date IS NOT NULL AND transaction_date != '-'
@@ -442,17 +487,6 @@ app.get('/api/datasets/:id/timeseries', (req, res) => {
         WHERE transaction_date IS NOT NULL AND transaction_date != '-'
       `;
       countSql = `SELECT COUNT(*) as total FROM transactions WHERE transaction_date IS NOT NULL AND transaction_date != '-'`;
-    }
-
-    // Apply filters if provided
-    const parsedFilters = parseFilters(filters);
-    if (parsedFilters && parsedFilters.__parseError) {
-      return res.status(400).json({ error: 'Invalid filters format' });
-    }
-
-    const { conditions, params, invalidField } = buildFilterConditions(parsedFilters);
-    if (invalidField) {
-      return res.status(400).json({ error: `Invalid filter field: ${invalidField}` });
     }
 
     if (conditions) {
@@ -468,8 +502,11 @@ app.get('/api/datasets/:id/timeseries', (req, res) => {
       sql += ` GROUP BY period ORDER BY period`;
     }
 
-    // Execute queries
-    const results = db.prepare(sql).all(...params);
+    // Execute queries. When groupBy is set, the CASE WHEN's IN (...) list in
+    // the SELECT clause is bound first, followed by the filter params in the
+    // WHERE clause, matching the order '?' placeholders appear in the SQL text.
+    const mainParams = groupBy ? [...topValues, ...params] : params;
+    const results = db.prepare(sql).all(...mainParams);
     const { total } = db.prepare(countSql).get(...params);
 
     // Transform results into the expected format
