@@ -298,9 +298,10 @@ app.get('/api/datasets/:id/stats', (req, res) => {
 });
 
 // Multi-dimensional analytics endpoint
+const MAX_GROUPS = 1000;
 app.get('/api/datasets/:id/analytics', (req, res) => {
   try {
-    const { dimension1, dimension2, filters } = req.query;
+    const { dimension1, dimension2, filters, limit } = req.query;
 
     if (!dimension1) {
       return res.status(400).json({ error: 'dimension1 parameter is required' });
@@ -311,6 +312,8 @@ app.get('/api/datasets/:id/analytics', (req, res) => {
     if (dimension2 && !ALLOWED_COLUMNS.has(dimension2)) {
       return res.status(400).json({ error: `Invalid dimension2: ${dimension2}` });
     }
+
+    const effectiveLimit = Math.min(Math.max(parseInt(limit) || MAX_GROUPS, 1), MAX_GROUPS);
 
     // Build SQL query
     let sql, countSql;
@@ -351,16 +354,23 @@ app.get('/api/datasets/:id/analytics', (req, res) => {
       countSql += whereClause;
     }
 
-    // Add GROUP BY and ORDER BY
+    // Add GROUP BY, ORDER BY, and LIMIT (fetch one extra row to detect truncation
+    // cheaply, without a second full-table COUNT(DISTINCT ...) scan)
     if (dimension2) {
-      sql += ` GROUP BY ${dimension1}, ${dimension2} ORDER BY count DESC`;
+      sql += ` GROUP BY ${dimension1}, ${dimension2} ORDER BY count DESC LIMIT ?`;
     } else {
-      sql += ` GROUP BY ${dimension1} ORDER BY count DESC`;
+      sql += ` GROUP BY ${dimension1} ORDER BY count DESC LIMIT ?`;
     }
+    const sqlParams = [...params, effectiveLimit + 1];
 
     // Execute queries
-    const results = db.prepare(sql).all(...params);
+    let results = db.prepare(sql).all(...sqlParams);
     const { total } = db.prepare(countSql).get(...params);
+
+    const truncated = results.length > effectiveLimit;
+    if (truncated) {
+      results = results.slice(0, effectiveLimit);
+    }
 
     // Format chart data
     let chartData;
@@ -378,7 +388,8 @@ app.get('/api/datasets/:id/analytics', (req, res) => {
       dimensions: dimension2 ? [dimension1, dimension2] : [dimension1],
       data: results,
       chartData: chartData,
-      total
+      total,
+      truncated
     });
   } catch (error) {
     console.error('Error calculating analytics:', error);
