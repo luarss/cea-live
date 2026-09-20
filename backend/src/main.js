@@ -1,9 +1,10 @@
-import { readFileSync, writeFileSync, mkdirSync, existsSync } from 'fs';
+import { writeFileSync, mkdirSync, existsSync, createReadStream } from 'fs';
 import { join, dirname } from 'path';
 import { fileURLToPath } from 'url';
 import { config as dotenvConfig } from 'dotenv';
 import Database from 'better-sqlite3';
-import { fetchDataWithPlaywright, getS3UrlFromDataGovSG, downloadCSVFromS3 } from './fetchers/data-gov-fetcher.js';
+import { parse } from 'csv-parse';
+import { getS3UrlFromDataGovSG, downloadCSVFromS3 } from './fetchers/data-gov-fetcher.js';
 import logger from './utils/logger.js';
 import { analyzeSchema } from './utils/schemaAnalyzer.js';
 import { generateVisualizationRecommendations } from './utils/vizRecommender.js';
@@ -14,93 +15,29 @@ const ROOT_DIR = join(__dirname, '..', '..');
 
 dotenvConfig({ path: join(ROOT_DIR, '.env') });
 
-async function processDataset(config) {
+// Rows sampled for schema analysis/viz recommendations instead of the full dataset
+const SCHEMA_SAMPLE_SIZE = 50000;
+// Rows buffered per SQLite insert transaction
+const INSERT_BATCH_SIZE = 10000;
+
+async function streamCSVIntoSQLite(config) {
   const { id, name, source } = config;
 
-  logger.log(`Processing dataset: ${name} (${id})`);
-
-  try {
-    // Fetch data from data.gov.sg
-    logger.log(`Fetching data from data.gov.sg (dataset: ${source.resourceId})`);
-    const rawData = await fetchDataWithPlaywright(source.resourceId);
-
-    if (!rawData || rawData.length === 0) {
-      throw new Error('No data fetched');
-    }
-
-    logger.success(`Fetched ${rawData.length} rows`);
-
-    // Analyze schema
-    logger.log('Analyzing schema...');
-    const schema = analyzeSchema(rawData);
-    logger.success(`Analyzed ${schema.columns.length} columns`);
-
-    // Generate visualization recommendations
-    logger.log('Generating visualization recommendations...');
-    const visualizationRecommendations = generateVisualizationRecommendations(schema, rawData);
-    logger.success(`Generated ${visualizationRecommendations.length} visualization recommendations`);
-
-    // Prepare output
-    const output = {
-      id,
-      name,
-      description: config.description || '',
-      metadata: {
-        lastUpdated: new Date().toISOString(),
-        rowCount: rawData.length,
-        columnCount: schema.columns.length,
-        resourceId: source.resourceId,
-        sourceType: source.type
-      },
-      schema,
-      visualizationRecommendations,
-      data: rawData
-    };
-
-    // Write to file
-    const outputDir = join(ROOT_DIR, 'data', 'processed');
-    if (!existsSync(outputDir)) {
-      mkdirSync(outputDir, { recursive: true });
-    }
-
-    const outputPath = join(outputDir, `${id}.json`);
-    writeFileSync(outputPath, JSON.stringify(output, null, 2));
-    logger.success(`Wrote ${rawData.length} records to ${outputPath}`);
-
-    return {
-      id,
-      name,
-      description: config.description || '',
-      metadata: {
-        lastUpdated: output.metadata.lastUpdated,
-        rowCount: output.metadata.rowCount,
-        columnCount: output.metadata.columnCount,
-        resourceId: output.metadata.resourceId,
-        sourceType: output.metadata.sourceType
-      }
-    };
-
-  } catch (error) {
-    logger.error(`Failed to process dataset ${id}:`, error.message);
-    throw error;
+  const csvPath = join(ROOT_DIR, 'data', 'CEASalespersonsPropertyTransactionRecordsresidential.csv');
+  if (!existsSync(csvPath)) {
+    throw new Error(`Local CSV file not found at ${csvPath}. Run 'npm run download' to fetch it.`);
   }
-}
 
-function migrateToSQLite(dataset) {
-  logger.log('='.repeat(60));
-  logger.log('Migrating to SQLite');
-  logger.log('='.repeat(60));
+  const outputDir = join(ROOT_DIR, 'data', 'processed');
+  if (!existsSync(outputDir)) {
+    mkdirSync(outputDir, { recursive: true });
+  }
 
-  // Create/open database
-  const dbPath = join(ROOT_DIR, 'data', 'processed', 'cea-transactions.db');
-  logger.log(`Creating database at: ${dbPath}`);
+  const dbPath = join(outputDir, 'cea-transactions.db');
+  logger.log(`Streaming CSV into database at: ${dbPath}`);
   const db = new Database(dbPath);
-
-  // Enable WAL mode for better performance
   db.pragma('journal_mode = WAL');
 
-  // Create table
-  logger.log('Creating table...');
   db.exec(`
     DROP TABLE IF EXISTS transactions;
 
@@ -116,16 +53,8 @@ function migrateToSQLite(dataset) {
       district TEXT,
       general_location TEXT
     );
-
-    CREATE INDEX idx_transaction_date ON transactions(transaction_date);
-    CREATE INDEX idx_property_type ON transactions(property_type);
-    CREATE INDEX idx_salesperson_reg_num ON transactions(salesperson_reg_num);
-    CREATE INDEX idx_town ON transactions(town);
-    CREATE INDEX idx_transaction_type ON transactions(transaction_type);
   `);
 
-  // Insert data in batches
-  logger.log('Inserting data...');
   const insert = db.prepare(`
     INSERT INTO transactions (
       salesperson_name, transaction_date, salesperson_reg_num,
@@ -134,7 +63,7 @@ function migrateToSQLite(dataset) {
     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
   `);
 
-  const insertMany = db.transaction((records) => {
+  const insertBatch = db.transaction((records) => {
     for (const record of records) {
       insert.run(
         record.salesperson_name || null,
@@ -150,15 +79,81 @@ function migrateToSQLite(dataset) {
     }
   });
 
-  // Insert in batches of 10000
-  const BATCH_SIZE = 10000;
-  for (let i = 0; i < dataset.data.length; i += BATCH_SIZE) {
-    const batch = dataset.data.slice(i, i + BATCH_SIZE);
-    insertMany(batch);
-    logger.log(`Inserted ${Math.min(i + BATCH_SIZE, dataset.data.length)} / ${dataset.data.length} records`);
+  const schemaSample = [];
+  let rowCount = 0;
+  let batch = [];
+
+  await new Promise((resolve, reject) => {
+    const parser = parse({
+      columns: true,
+      skip_empty_lines: true,
+      trim: true,
+      relax_quotes: true,
+      quote: '"',
+      escape: '"'
+    });
+
+    parser.on('readable', () => {
+      let record;
+      while ((record = parser.read()) !== null) {
+        rowCount++;
+        if (schemaSample.length < SCHEMA_SAMPLE_SIZE) {
+          schemaSample.push(record);
+        }
+        batch.push(record);
+        if (batch.length >= INSERT_BATCH_SIZE) {
+          insertBatch(batch);
+          logger.log(`Inserted ${rowCount} records`);
+          batch = [];
+        }
+      }
+    });
+
+    parser.on('error', reject);
+    parser.on('end', () => {
+      if (batch.length > 0) {
+        insertBatch(batch);
+        logger.log(`Inserted ${rowCount} records`);
+      }
+      resolve();
+    });
+
+    createReadStream(csvPath).pipe(parser);
+  });
+
+  if (rowCount === 0) {
+    db.close();
+    throw new Error('No data fetched');
   }
 
-  // Store metadata in a separate table
+  logger.success(`Inserted ${rowCount} rows`);
+
+  // Build indexes after bulk load (faster than maintaining them during insert)
+  logger.log('Creating indexes...');
+  db.exec(`
+    CREATE INDEX idx_transaction_date ON transactions(transaction_date);
+    CREATE INDEX idx_property_type ON transactions(property_type);
+    CREATE INDEX idx_salesperson_reg_num ON transactions(salesperson_reg_num);
+    CREATE INDEX idx_town ON transactions(town);
+    CREATE INDEX idx_transaction_type ON transactions(transaction_type);
+  `);
+
+  // Analyze schema and generate viz recommendations from a sample, not the full dataset
+  logger.log(`Analyzing schema from a ${schemaSample.length}-row sample...`);
+  const schema = analyzeSchema(schemaSample);
+  logger.success(`Analyzed ${schema.columns.length} columns`);
+
+  const visualizationRecommendations = generateVisualizationRecommendations(schema, schemaSample);
+  logger.success(`Generated ${visualizationRecommendations.length} visualization recommendations`);
+
+  const metadata = {
+    lastUpdated: new Date().toISOString(),
+    rowCount,
+    columnCount: schema.columns.length,
+    resourceId: source.resourceId,
+    sourceType: source.type
+  };
+
   db.exec(`
     DROP TABLE IF EXISTS metadata;
 
@@ -169,22 +164,27 @@ function migrateToSQLite(dataset) {
   `);
 
   const insertMeta = db.prepare('INSERT INTO metadata (key, value) VALUES (?, ?)');
-  insertMeta.run('id', dataset.id);
-  insertMeta.run('name', dataset.name);
-  insertMeta.run('description', dataset.description);
-  insertMeta.run('metadata', JSON.stringify(dataset.metadata));
-  insertMeta.run('schema', JSON.stringify(dataset.schema));
-  insertMeta.run('visualizationRecommendations', JSON.stringify(dataset.visualizationRecommendations));
+  insertMeta.run('id', id);
+  insertMeta.run('name', name);
+  insertMeta.run('description', config.description || '');
+  insertMeta.run('metadata', JSON.stringify(metadata));
+  insertMeta.run('schema', JSON.stringify(schema));
+  insertMeta.run('visualizationRecommendations', JSON.stringify(visualizationRecommendations));
 
-  // Get final count
   const count = db.prepare('SELECT COUNT(*) as count FROM transactions').get();
   logger.success(`Migration complete! ${count.count} records in database`);
 
-  // Show database size
   const { size } = db.prepare("SELECT page_count * page_size as size FROM pragma_page_count(), pragma_page_size()").get();
   logger.log(`Database size: ${(size / 1024 / 1024).toFixed(2)} MB`);
 
+  // Checkpoint WAL into the main db file and drop back to a single-file journal
+  // mode so the runtime's read-only connection isn't left with stray WAL/SHM state
+  db.pragma('wal_checkpoint(TRUNCATE)');
+  db.pragma('journal_mode = DELETE');
+
   db.close();
+
+  return { id, name, description: config.description || '', metadata };
 }
 
 export async function runPipeline() {
@@ -203,8 +203,8 @@ export async function runPipeline() {
     }
   };
 
-  // Process the dataset
-  const result = await processDataset(datasetConfig);
+  // Stream CSV rows straight into SQLite (no intermediate full-dataset JSON)
+  const result = await streamCSVIntoSQLite(datasetConfig);
 
   // Generate datasets catalog file
   logger.log('Generating datasets catalog...');
@@ -221,15 +221,8 @@ export async function runPipeline() {
   logger.log('='.repeat(60));
   logger.success(`Pipeline completed successfully`);
   logger.log(`Processed ${result.metadata.rowCount} records`);
-
-  // Migrate to SQLite
-  const outputDir = join(ROOT_DIR, 'data', 'processed');
-  const outputPath = join(outputDir, `${result.id}.json`);
-  const jsonData = JSON.parse(readFileSync(outputPath, 'utf-8'));
-  migrateToSQLite(jsonData);
-
   logger.log('='.repeat(60));
-  logger.success(`Build complete! CSV → JSON → SQLite`);
+  logger.success(`Build complete! CSV → SQLite`);
 
   return result;
 }
