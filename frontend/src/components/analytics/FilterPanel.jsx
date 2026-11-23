@@ -1,130 +1,112 @@
 import { useState, useRef, useEffect } from 'react';
+import { PROPERTY_TYPES, TRANSACTION_TYPES, REPRESENTATION_TYPES } from '../../lib/format';
+import { ChevronDownIcon, CheckIcon } from '../ui/Icons';
 
-const PROPERTY_TYPES = [
-  { value: 'CONDOMINIUM_APARTMENTS', label: 'Condominium/Apartments' },
-  { value: 'HDB', label: 'HDB' },
-  { value: 'LANDED', label: 'Landed' },
-  { value: 'EXECUTIVE_CONDOMINIUM', label: 'Executive Condominium' },
-  { value: 'STRATA_LANDED', label: 'Strata Landed' }
+const FILTER_FIELDS = [
+  { field: 'property_type', label: 'Property', options: PROPERTY_TYPES },
+  { field: 'transaction_type', label: 'Deal type', options: TRANSACTION_TYPES },
+  { field: 'represented', label: 'Acting for', options: REPRESENTATION_TYPES },
 ];
 
-const TRANSACTION_TYPES = [
-  { value: 'WHOLE RENTAL', label: 'Whole Rental' },
-  { value: 'RESALE', label: 'Resale' },
-  { value: 'ROOM RENTAL', label: 'Room Rental' },
-  { value: 'NEW SALE', label: 'New Sale' },
-  { value: 'SUB-SALE', label: 'Sub-Sale' }
-];
-
-const REPRESENTATION_TYPES = [
-  { value: 'LANDLORD', label: 'Landlord' },
-  { value: 'SELLER', label: 'Seller' },
-  { value: 'BUYER', label: 'Buyer' },
-  { value: 'TENANT', label: 'Tenant' }
-];
-
-function MultiSelectDropdown({ label, options, selected = [], onChange, fieldName }) {
+function MultiSelectDropdown({ label, options, selected = [], onChange }) {
   const [isOpen, setIsOpen] = useState(false);
   const dropdownRef = useRef(null);
+  const buttonRef = useRef(null);
 
   useEffect(() => {
+    if (!isOpen) return undefined;
+
     function handleClickOutside(event) {
       if (dropdownRef.current && !dropdownRef.current.contains(event.target)) {
         setIsOpen(false);
       }
     }
 
-    if (isOpen) {
-      document.addEventListener('mousedown', handleClickOutside);
-      return () => document.removeEventListener('mousedown', handleClickOutside);
+    function handleEscape(event) {
+      if (event.key === 'Escape') {
+        setIsOpen(false);
+        buttonRef.current?.focus();
+      }
     }
+
+    document.addEventListener('mousedown', handleClickOutside);
+    document.addEventListener('keydown', handleEscape);
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+      document.removeEventListener('keydown', handleEscape);
+    };
   }, [isOpen]);
 
   const handleToggle = (value) => {
     const newSelected = selected.includes(value)
-      ? selected.filter(v => v !== value)
+      ? selected.filter(item => item !== value)
       : [...selected, value];
     onChange(newSelected);
   };
 
-  const handleClear = (e) => {
-    e.stopPropagation();
-    onChange([]);
-  };
-
   const getDisplayText = () => {
-    if (selected.length === 0) return 'All';
+    if (selected.length === 0) return 'Any';
     if (selected.length === 1) {
-      return options.find(o => o.value === selected[0])?.label || selected[0];
+      return options.find(option => option.value === selected[0])?.label || selected[0];
     }
     return `${selected.length} selected`;
   };
 
+  const isActive = selected.length > 0;
+
   return (
     <div className="relative" ref={dropdownRef}>
-      <label className="block text-sm font-medium text-gray-700 mb-2">
-        {label}
-      </label>
       <button
+        ref={buttonRef}
         type="button"
         onClick={() => setIsOpen(!isOpen)}
-        className="w-full px-4 py-2.5 text-left bg-white border border-gray-300 rounded-lg shadow-sm hover:border-gray-400 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500 transition-colors"
+        aria-expanded={isOpen}
+        aria-haspopup="true"
+        className={`h-9 pl-4 pr-3 rounded-full border text-sm flex items-center gap-2 transition-colors duration-150 ${
+          isActive
+            ? 'bg-signal-wash border-signal text-ink'
+            : 'bg-white border-[#c9c9c5] text-ink hover:border-ink'
+        }`}
       >
-        <div className="flex items-center justify-between">
-          <span className={`text-sm ${selected.length === 0 ? 'text-gray-500' : 'text-gray-900'}`}>
-            {getDisplayText()}
-          </span>
-          <div className="flex items-center gap-2">
-            {selected.length > 0 && (
-              <button
-                onClick={handleClear}
-                className="text-gray-400 hover:text-gray-600 transition-colors"
-                aria-label="Clear selection"
-              >
-                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                </svg>
-              </button>
-            )}
-            <svg
-              className={`w-5 h-5 text-gray-400 transition-transform ${isOpen ? 'rotate-180' : ''}`}
-              fill="none"
-              stroke="currentColor"
-              viewBox="0 0 24 24"
-            >
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-            </svg>
-          </div>
-        </div>
+        <span className="text-ink-muted">{label}</span>
+        <span className="font-semibold">{getDisplayText()}</span>
+        <ChevronDownIcon className={`w-4 h-4 text-ink-soft transition-transform duration-150 ${isOpen ? 'rotate-180' : ''}`} />
       </button>
 
       {isOpen && (
-        <div className="absolute z-10 w-full mt-1 bg-white border border-gray-300 rounded-lg shadow-lg max-h-60 overflow-auto">
-          <div className="py-1">
-            {options.map(({ value, label }) => (
+        <div className="absolute z-30 left-0 mt-2 min-w-[220px] bg-white border border-ink shadow-[0_8px_24px_rgba(0,0,0,0.12)] py-1">
+          {options.map(({ value, label: optionLabel }) => {
+            const isChecked = selected.includes(value);
+            return (
               <label
                 key={value}
-                className="flex items-center px-4 py-2 hover:bg-gray-50 cursor-pointer transition-colors"
+                className="flex items-center gap-3 px-4 py-2 text-sm cursor-pointer hover:bg-wash"
               >
                 <input
                   type="checkbox"
-                  checked={selected.includes(value)}
+                  checked={isChecked}
                   onChange={() => handleToggle(value)}
-                  className="w-4 h-4 text-primary-600 border-gray-300 rounded focus:ring-primary-500"
+                  className="peer sr-only"
                 />
-                <span className="ml-3 text-sm text-gray-700">
-                  {label}
+                <span
+                  className={`w-4 h-4 border flex items-center justify-center peer-focus-visible:ring-2 peer-focus-visible:ring-signal ${
+                    isChecked ? 'bg-ink border-ink text-white' : 'border-[#8a8a86] bg-white'
+                  }`}
+                  aria-hidden="true"
+                >
+                  {isChecked && <CheckIcon className="w-3 h-3" />}
                 </span>
+                <span>{optionLabel}</span>
               </label>
-            ))}
-          </div>
+            );
+          })}
         </div>
       )}
     </div>
   );
 }
 
-export default function FilterPanel({ filters, onFiltersChange }) {
+export default function FilterPanel({ filters, onFiltersChange, isUpdating }) {
   const handleFilterChange = (field, values) => {
     onFiltersChange({
       ...filters,
@@ -132,58 +114,32 @@ export default function FilterPanel({ filters, onFiltersChange }) {
     });
   };
 
-  const handleReset = () => {
-    onFiltersChange({});
-  };
-
-  const hasActiveFilters = Object.keys(filters).some(key => filters[key]?.length > 0);
-  const activeFilterCount = Object.values(filters).filter(v => v?.length > 0).length;
+  const hasActiveFilters = Object.values(filters).some(values => values?.length > 0);
 
   return (
-    <div className="card mb-6">
-      <div className="flex items-center justify-between mb-4">
-        <div className="flex items-center gap-3">
-          <h3 className="text-lg font-semibold text-gray-800">Filters</h3>
-          {hasActiveFilters && (
-            <span className="px-2 py-1 bg-primary-100 text-primary-700 text-xs font-medium rounded-full">
-              {activeFilterCount} active
-            </span>
-          )}
-        </div>
+    <div className="border-b border-rule bg-white">
+      <div className="max-w-shell mx-auto px-4 sm:px-6 lg:px-10 py-3 flex flex-wrap items-center gap-2">
+        {FILTER_FIELDS.map(({ field, label, options }) => (
+          <MultiSelectDropdown
+            key={field}
+            label={label}
+            options={options}
+            selected={filters[field] || []}
+            onChange={(values) => handleFilterChange(field, values)}
+          />
+        ))}
         {hasActiveFilters && (
           <button
-            onClick={handleReset}
-            className="text-sm text-gray-600 hover:text-gray-900 font-medium transition-colors"
+            type="button"
+            onClick={() => onFiltersChange({})}
+            className="h-9 px-3 text-sm font-semibold text-ink-soft underline underline-offset-4 decoration-[#c9c9c5] hover:text-ink hover:decoration-ink"
           >
-            Reset All
+            Clear filters
           </button>
         )}
-      </div>
-
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-        <MultiSelectDropdown
-          label="Property Type"
-          options={PROPERTY_TYPES}
-          selected={filters.property_type || []}
-          onChange={(values) => handleFilterChange('property_type', values)}
-          fieldName="property_type"
-        />
-
-        <MultiSelectDropdown
-          label="Transaction Type"
-          options={TRANSACTION_TYPES}
-          selected={filters.transaction_type || []}
-          onChange={(values) => handleFilterChange('transaction_type', values)}
-          fieldName="transaction_type"
-        />
-
-        <MultiSelectDropdown
-          label="Representation"
-          options={REPRESENTATION_TYPES}
-          selected={filters.represented || []}
-          onChange={(values) => handleFilterChange('represented', values)}
-          fieldName="represented"
-        />
+        <span className={`ml-auto text-sm text-ink-muted transition-opacity duration-200 ${isUpdating ? 'opacity-100' : 'opacity-0'}`} aria-live="polite">
+          {isUpdating ? 'Updating…' : ''}
+        </span>
       </div>
     </div>
   );

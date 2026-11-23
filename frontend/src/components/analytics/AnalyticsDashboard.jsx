@@ -1,153 +1,85 @@
-import { useState } from 'react';
-import { useMarketInsights, useTimeSeriesData } from '../../hooks/useAnalytics';
-import PieChart from '../visualizations/PieChart';
-import BarChart from '../visualizations/BarChart';
-import LineChart from '../visualizations/LineChart';
-import FilterPanel from './FilterPanel';
+import { useTimeSeriesData } from '../../hooks/useAnalytics';
+import VolumeChart from '../visualizations/VolumeChart';
+import BarList from '../visualizations/BarList';
+import {
+  formatNumber,
+  formatSignedPercent,
+  propertyType,
+  representationLabel,
+  transactionLabel,
+  twelveMonthChange,
+} from '../../lib/format';
 
-export default function AnalyticsDashboard({ datasetId }) {
-  const [filters, setFilters] = useState({});
+function Figure({ label, value }) {
+  return (
+    <div className="py-4 pr-6 sm:border-r sm:border-rule last:border-r-0">
+      <dt className="text-sm text-ink-muted">{label}</dt>
+      <dd className="text-[28px] leading-tight font-bold tabular mt-0.5">{value}</dd>
+    </div>
+  );
+}
 
-  const { data: insights, loading: insightsLoading } = useMarketInsights(datasetId, filters);
+function Breakdown({ title, children }) {
+  return (
+    <section>
+      <h2 className="text-[13px] font-bold uppercase tracking-[0.06em] text-ink-soft pb-2 mb-4 border-b-2 border-ink">{title}</h2>
+      {children}
+    </section>
+  );
+}
+
+export default function AnalyticsDashboard({ datasetId, filters, insights, insightsError, isUpdating }) {
   const { data: timeSeriesData } = useTimeSeriesData(datasetId, 'month', null, filters);
-
-  if (insightsLoading) {
-    return (
-      <div className="flex items-center justify-center h-96">
-        <div className="text-gray-500">Loading analytics...</div>
-      </div>
-    );
-  }
+  const series = timeSeriesData?.series || [];
+  const change = twelveMonthChange(series);
 
   if (!insights) {
-    return (
-      <div className="flex items-center justify-center h-96">
-        <div className="text-gray-500">No analytics data available</div>
+    return insightsError ? (
+      <p className="py-10 text-ink-soft">Couldn’t load market figures ({insightsError}). Check your connection and reload.</p>
+    ) : (
+      <div className="animate-pulse space-y-6" aria-label="Loading market figures">
+        <div className="h-24 bg-wash" />
+        <div className="h-64 bg-wash" />
       </div>
     );
   }
 
-  const transactionTypeChartData = insights.distributions.transactionTypes;
-  const representedChartData = insights.distributions.represented;
-  const propertyTypeChartData = insights.distributions.propertyTypes.slice(0, 5);
-  const timeSeriesChartData = timeSeriesData?.chartData || [];
+  const { summary, trends, distributions } = insights;
 
   return (
-    <div className="space-y-8">
-      {/* Filter Panel */}
-      <FilterPanel filters={filters} onFiltersChange={setFilters} />
+    <div className={`space-y-12 transition-opacity duration-200 ${isUpdating ? 'opacity-60' : ''}`}>
+      <section aria-labelledby="market-heading">
+        <h1 id="market-heading" className="text-2xl font-bold">Residential market</h1>
 
-      {/* Key Metrics Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-        <div className="card">
-          <div className="text-sm text-gray-500 mb-1">Total Transactions</div>
-          <div className="text-2xl font-bold">{insights.summary.totalTransactions.toLocaleString()}</div>
-        </div>
-        <div className="card">
-          <div className="text-sm text-gray-500 mb-1">Date Range</div>
-          <div className="text-2xl font-bold text-sm">
-            {insights.summary.dateRange.start} to {insights.summary.dateRange.end}
-          </div>
-        </div>
-        <div className="card">
-          <div className="text-sm text-gray-500 mb-1">Monthly Average</div>
-          <div className="text-2xl font-bold">{insights.trends.monthlyAverage.toLocaleString()}</div>
-        </div>
-        <div className="card">
-          <div className="text-sm text-gray-500 mb-1">Yearly Growth</div>
-          <div className={`text-2xl font-bold ${parseFloat(insights.trends.yearlyGrowth) >= 0 ? 'text-green-600' : 'text-red-600'}`}>
-            {insights.trends.yearlyGrowth}
-          </div>
-        </div>
-      </div>
-
-      {/* Transaction Patterns Section */}
-      <div>
-        <h3 className="text-xl font-bold mb-4">Transaction Patterns</h3>
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          <div className="card">
-            <PieChart
-              data={transactionTypeChartData}
-              dataKey="count"
-              nameKey="name"
-              title="Transaction Types"
-            />
-          </div>
-          <div className="card">
-            <PieChart
-              data={representedChartData}
-              dataKey="count"
-              nameKey="name"
-              title="Buyer vs Seller Representation"
-            />
-          </div>
-        </div>
-      </div>
-
-      {/* Temporal Trends Section */}
-      <div>
-        <h3 className="text-xl font-bold mb-4">Transaction Volume Over Time</h3>
-        <div className="card">
-          <LineChart
-            data={timeSeriesChartData}
-            xKey="period"
-            lines={['count']}
-            title="Monthly Transactions (Last 24 Months)"
+        <dl className="grid grid-cols-1 sm:grid-cols-3 mt-4 border-y border-ink">
+          <Figure label="Recorded transactions" value={formatNumber(summary.totalTransactions)} />
+          <Figure label="Per month, on average" value={formatNumber(trends.monthlyAverage)} />
+          <Figure
+            label="Last 12 months vs the 12 before"
+            value={change ? formatSignedPercent(change.percent) : '–'}
           />
-        </div>
-      </div>
+        </dl>
+      </section>
 
-      {/* Market Composition Section */}
-      <div>
-        <h3 className="text-xl font-bold mb-4">Market Composition</h3>
-        <div className="card">
-          <BarChart
-            data={propertyTypeChartData}
-            xKey="name"
-            yKey="count"
-            title="Top Property Types"
+      <section aria-labelledby="volume-heading">
+        <h2 id="volume-heading" className="text-lg font-bold mb-3">Transactions per month</h2>
+        <VolumeChart series={series} height={260} />
+      </section>
+
+      <div className="grid gap-10 md:grid-cols-3">
+        <Breakdown title="Property">
+          <BarList
+            items={distributions.propertyTypes}
+            renderLabel={name => propertyType(name).label}
+            colorFor={name => propertyType(name).color}
           />
-        </div>
-      </div>
-
-      {/* Distribution Tables */}
-      <div>
-        <h3 className="text-xl font-bold mb-4">Detailed Distributions</h3>
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          <div className="card">
-            <h4 className="font-semibold mb-3">Property Types</h4>
-            <div className="space-y-2">
-              {insights.distributions.propertyTypes.map((item, index) => (
-                <div key={index} className="flex justify-between text-sm">
-                  <span>{item.name}</span>
-                  <span className="font-semibold">{item.percentage}%</span>
-                </div>
-              ))}
-            </div>
-          </div>
-          <div className="card">
-            <h4 className="font-semibold mb-3">Transaction Types</h4>
-            <div className="space-y-2">
-              {insights.distributions.transactionTypes.map((item, index) => (
-                <div key={index} className="flex justify-between text-sm">
-                  <span>{item.name}</span>
-                  <span className="font-semibold">{item.percentage}%</span>
-                </div>
-              ))}
-            </div>
-          </div>
-          <div className="card">
-            <h4 className="font-semibold mb-3">Representation</h4>
-            <div className="space-y-2">
-              {insights.distributions.represented.map((item, index) => (
-                <div key={index} className="flex justify-between text-sm">
-                  <span>{item.name}</span>
-                  <span className="font-semibold">{item.percentage}%</span>
-                </div>
-              ))}
-            </div>
-          </div>
-        </div>
+        </Breakdown>
+        <Breakdown title="Deal type">
+          <BarList items={distributions.transactionTypes} renderLabel={transactionLabel} />
+        </Breakdown>
+        <Breakdown title="Salesperson acting for">
+          <BarList items={distributions.represented} renderLabel={representationLabel} />
+        </Breakdown>
       </div>
     </div>
   );
