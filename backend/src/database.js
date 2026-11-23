@@ -1,4 +1,4 @@
-import Database from 'better-sqlite3';
+import { DatabaseSync } from 'node:sqlite';
 import { join, dirname } from 'path';
 import { fileURLToPath } from 'url';
 
@@ -7,7 +7,7 @@ const __dirname = dirname(__filename);
 const ROOT_DIR = join(__dirname, '..', '..');
 
 const dbPath = join(ROOT_DIR, 'data', 'processed', 'cea-transactions.db');
-const db = new Database(dbPath, { readonly: true });
+const db = new DatabaseSync(dbPath, { readOnly: true });
 
 console.log('Connected to SQLite database');
 
