@@ -1,5 +1,6 @@
 import express from 'express';
 import cors from 'cors';
+import compression from 'compression';
 import { readFileSync, existsSync } from 'fs';
 import { join, dirname } from 'path';
 import { fileURLToPath } from 'url';
@@ -49,10 +50,12 @@ const corsOptions = {
 };
 
 // Middleware
+app.use(compression());
 app.use(cors(corsOptions));
 app.use(express.json());
 
 const MAX_CACHED_RESPONSES = 500;
+const API_CACHE_CONTROL = 'public, max-age=3600, stale-while-revalidate=86400';
 const responseCache = new Map();
 export const PRECOMPUTED_RESPONSES_PATH = join(ROOT_DIR, 'data', 'processed', 'precomputed-responses.json');
 
@@ -63,6 +66,7 @@ app.use('/api', (req, res, next) => {
 
   const cacheKey = req.originalUrl;
   if (responseCache.has(cacheKey)) {
+    res.setHeader('Cache-Control', API_CACHE_CONTROL);
     return res.json(responseCache.get(cacheKey));
   }
 
@@ -73,6 +77,7 @@ app.use('/api', (req, res, next) => {
         responseCache.delete(responseCache.keys().next().value);
       }
       responseCache.set(cacheKey, body);
+      res.setHeader('Cache-Control', API_CACHE_CONTROL);
     }
     return sendJson(body);
   };
@@ -144,13 +149,31 @@ function buildFilterConditions(parsedFilters) {
 }
 
 
+const DASHBOARD_COUNTS = {
+  table: 'dashboard_counts',
+  columns: new Set(['property_type', 'transaction_type', 'represented', 'transaction_date', 'period_month'])
+};
+
+const AGENT_COUNTS = {
+  table: 'agent_counts',
+  columns: new Set(['salesperson_reg_num', 'salesperson_name', 'property_type', 'transaction_type', 'represented'])
+};
+
+function chooseCountSource(parsedFilters, aggregate, requiredColumns = []) {
+  const columns = [...Object.keys(parsedFilters || {}), ...requiredColumns];
+  if (columns.every(column => aggregate.columns.has(column))) {
+    return { table: aggregate.table, countExpression: 'COALESCE(SUM(row_count), 0)' };
+  }
+  return { table: 'transactions', countExpression: 'COUNT(*)' };
+}
+
 // Serve frontend static files in production
 const frontendDistPath = join(ROOT_DIR, 'frontend', 'dist');
 if (existsSync(frontendDistPath)) {
   console.log('Serving frontend from:', frontendDistPath);
   const hashedAssetsPath = join(frontendDistPath, 'assets');
   app.use(express.static(frontendDistPath, {
-    index: 'index.html',
+    index: false,
     setHeaders: (res, filePath) => {
       if (filePath.startsWith(hashedAssetsPath)) {
         res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
@@ -478,6 +501,8 @@ app.get('/api/datasets/:id/timeseries', (req, res) => {
       return res.status(400).json({ error: `Invalid filter field: ${invalidField}` });
     }
 
+    const source = chooseCountSource(parsedFilters, DASHBOARD_COUNTS, groupBy ? [groupBy] : []);
+
     let sql, countSql;
     let topValues = [];
 
@@ -486,8 +511,8 @@ app.get('/api/datasets/:id/timeseries', (req, res) => {
       // filters as the main query), so the main query can fold everything
       // else into a single 'Other' bucket and stay bounded to N+1 series.
       let topSql = `
-        SELECT ${groupBy} as groupByValue, COUNT(*) as cnt
-        FROM transactions
+        SELECT ${groupBy} as groupByValue, ${source.countExpression} as cnt
+        FROM ${source.table}
         WHERE period_month IS NOT NULL
       `;
       const topParams = [...params];
@@ -505,20 +530,20 @@ app.get('/api/datasets/:id/timeseries', (req, res) => {
         SELECT
           ${periodExpression} as period,
           CASE WHEN ${groupBy} IN (${inPlaceholders}) THEN COALESCE(${groupBy}, 'Unknown') ELSE 'Other' END as groupByValue,
-          COUNT(*) as count
-        FROM transactions
+          ${source.countExpression} as count
+        FROM ${source.table}
         WHERE period_month IS NOT NULL
       `;
-      countSql = `SELECT COUNT(*) as total FROM transactions WHERE period_month IS NOT NULL`;
+      countSql = `SELECT ${source.countExpression} as total FROM ${source.table} WHERE period_month IS NOT NULL`;
     } else {
       sql = `
         SELECT
           ${periodExpression} as period,
-          COUNT(*) as count
-        FROM transactions
+          ${source.countExpression} as count
+        FROM ${source.table}
         WHERE period_month IS NOT NULL
       `;
-      countSql = `SELECT COUNT(*) as total FROM transactions WHERE period_month IS NOT NULL`;
+      countSql = `SELECT ${source.countExpression} as total FROM ${source.table} WHERE period_month IS NOT NULL`;
     }
 
     if (conditions) {
@@ -592,13 +617,14 @@ app.get('/api/datasets/:id/insights', (req, res) => {
     if (invalidField) {
       return res.status(400).json({ error: `Invalid filter field: ${invalidField}` });
     }
+    const source = chooseCountSource(parsedFilters, DASHBOARD_COUNTS);
     const whereClause = conditions ? ' WHERE ' + conditions : '';
 
     // Get total transactions
-    const { totalTransactions } = db.prepare(`SELECT COUNT(*) as totalTransactions FROM transactions${whereClause}`).get(...params);
+    const { totalTransactions } = db.prepare(`SELECT ${source.countExpression} as totalTransactions FROM ${source.table}${whereClause}`).get(...params);
 
     // Get date range
-    const datedRows = `FROM transactions ${whereClause ? whereClause + ' AND' : 'WHERE'} period_month IS NOT NULL`;
+    const datedRows = `FROM ${source.table} ${whereClause ? whereClause + ' AND' : 'WHERE'} period_month IS NOT NULL`;
     const dateRangeQuery = `
       SELECT
         (SELECT transaction_date ${datedRows} ORDER BY period_month ASC LIMIT 1) as start,
@@ -610,9 +636,9 @@ app.get('/api/datasets/:id/insights', (req, res) => {
     const propertyTypeQuery = `
       SELECT
         COALESCE(property_type, 'Unknown') as name,
-        COUNT(*) as count,
-        ROUND(CAST(COUNT(*) AS FLOAT) / ${totalTransactions} * 100, 1) as percentage
-      FROM transactions
+        ${source.countExpression} as count,
+        ROUND(CAST(${source.countExpression} AS FLOAT) / ${totalTransactions} * 100, 1) as percentage
+      FROM ${source.table}
       ${whereClause}
       GROUP BY property_type
       ORDER BY count DESC
@@ -624,9 +650,9 @@ app.get('/api/datasets/:id/insights', (req, res) => {
     const transactionTypeQuery = `
       SELECT
         COALESCE(transaction_type, 'Unknown') as name,
-        COUNT(*) as count,
-        ROUND(CAST(COUNT(*) AS FLOAT) / ${totalTransactions} * 100, 1) as percentage
-      FROM transactions
+        ${source.countExpression} as count,
+        ROUND(CAST(${source.countExpression} AS FLOAT) / ${totalTransactions} * 100, 1) as percentage
+      FROM ${source.table}
       ${whereClause}
       GROUP BY transaction_type
       ORDER BY count DESC
@@ -638,9 +664,9 @@ app.get('/api/datasets/:id/insights', (req, res) => {
     const representedQuery = `
       SELECT
         COALESCE(represented, 'Unknown') as name,
-        COUNT(*) as count,
-        ROUND(CAST(COUNT(*) AS FLOAT) / ${totalTransactions} * 100, 1) as percentage
-      FROM transactions
+        ${source.countExpression} as count,
+        ROUND(CAST(${source.countExpression} AS FLOAT) / ${totalTransactions} * 100, 1) as percentage
+      FROM ${source.table}
       ${whereClause}
       GROUP BY represented
       ORDER BY count DESC
@@ -649,8 +675,8 @@ app.get('/api/datasets/:id/insights', (req, res) => {
 
     // Monthly trends
     const monthlyQuery = `
-      SELECT period_month as period, COUNT(*) as count
-      FROM transactions
+      SELECT period_month as period, ${source.countExpression} as count
+      FROM ${source.table}
       ${whereClause}${whereClause ? ' AND' : ' WHERE'} period_month IS NOT NULL
       GROUP BY period_month
       ORDER BY period_month
@@ -715,6 +741,7 @@ app.get('/api/datasets/:id/agents/top', (req, res) => {
     if (invalidField) {
       return res.status(400).json({ error: `Invalid filter field: ${invalidField}` });
     }
+    const source = chooseCountSource(parsedFilters, AGENT_COUNTS);
     if (conditions) {
       whereClause += ' AND ' + conditions;
     }
@@ -731,8 +758,8 @@ app.get('/api/datasets/:id/agents/top', (req, res) => {
       SELECT
         salesperson_reg_num as regNum,
         salesperson_name as name,
-        COUNT(*) as totalTransactions
-      FROM transactions
+        ${source.countExpression} as totalTransactions
+      FROM ${source.table}
       ${whereClause}
       GROUP BY salesperson_reg_num, salesperson_name
       ORDER BY totalTransactions DESC
@@ -744,7 +771,7 @@ app.get('/api/datasets/:id/agents/top', (req, res) => {
     // Get total unique agents count (without limit)
     const totalAgentsQuery = `
       SELECT COUNT(DISTINCT salesperson_reg_num) as total
-      FROM transactions
+      FROM ${source.table}
       ${whereClause}
     `;
     const { total } = db.prepare(totalAgentsQuery).get(...params.slice(0, -1)); // Exclude limit param
@@ -778,9 +805,9 @@ app.get('/api/datasets/:id/agents/top', (req, res) => {
           SELECT
             salesperson_reg_num,
             property_type,
-            COUNT(*) as count,
-            ROW_NUMBER() OVER (PARTITION BY salesperson_reg_num ORDER BY COUNT(*) DESC) as rank
-          FROM transactions
+            ${source.countExpression} as count,
+            ROW_NUMBER() OVER (PARTITION BY salesperson_reg_num ORDER BY ${source.countExpression} DESC) as rank
+          FROM ${source.table}
           ${batchWhere}
           GROUP BY salesperson_reg_num, property_type
         )
@@ -799,9 +826,9 @@ app.get('/api/datasets/:id/agents/top', (req, res) => {
           SELECT
             salesperson_reg_num,
             transaction_type,
-            COUNT(*) as count,
-            ROW_NUMBER() OVER (PARTITION BY salesperson_reg_num ORDER BY COUNT(*) DESC) as rank
-          FROM transactions
+            ${source.countExpression} as count,
+            ROW_NUMBER() OVER (PARTITION BY salesperson_reg_num ORDER BY ${source.countExpression} DESC) as rank
+          FROM ${source.table}
           ${batchWhere}
           GROUP BY salesperson_reg_num, transaction_type
         )
@@ -820,9 +847,9 @@ app.get('/api/datasets/:id/agents/top', (req, res) => {
           SELECT
             salesperson_reg_num,
             represented,
-            COUNT(*) as count,
-            ROW_NUMBER() OVER (PARTITION BY salesperson_reg_num ORDER BY COUNT(*) DESC) as rank
-          FROM transactions
+            ${source.countExpression} as count,
+            ROW_NUMBER() OVER (PARTITION BY salesperson_reg_num ORDER BY ${source.countExpression} DESC) as rank
+          FROM ${source.table}
           ${batchWhere}
           GROUP BY salesperson_reg_num, represented
         )
@@ -1034,10 +1061,26 @@ app.get('/health', (req, res) => {
 // Catch-all route - serve frontend for client-side routing
 // Only used in production when frontend is built
 // Use middleware instead of route for Express 5 compatibility
+let indexHtmlTemplate = null;
+
+function renderIndexHtml() {
+  if (!indexHtmlTemplate) {
+    indexHtmlTemplate = readFileSync(join(frontendDistPath, 'index.html'), 'utf-8');
+  }
+  const initialData = Object.fromEntries(
+    WARMUP_PATHS.filter(path => responseCache.has(path)).map(path => [path, responseCache.get(path)])
+  );
+  const serializedData = JSON.stringify(initialData).replace(/</g, '\\u003c');
+  return indexHtmlTemplate.replace(
+    '</head>',
+    () => `<script>window.__INITIAL_DATA__=${serializedData}</script></head>`
+  );
+}
+
 if (existsSync(frontendDistPath)) {
   app.use((req, res) => {
-    const indexPath = join(frontendDistPath, 'index.html');
-    res.sendFile(indexPath);
+    res.setHeader('Cache-Control', 'no-cache');
+    res.type('html').send(renderIndexHtml());
   });
 }
 

@@ -1,8 +1,5 @@
 import { useState, useEffect } from 'react';
-import axios from 'axios';
-
-const API_BASE_URL = import.meta.env.VITE_API_URL ||
-  (import.meta.env.PROD ? '' : 'http://localhost:3003');
+import { getJson } from '../api';
 
 /**
  * Hook for fetching time-series data
@@ -33,14 +30,14 @@ export function useTimeSeriesData(datasetId, period = 'month', groupBy = null, f
       params.append('filters', JSON.stringify(filters));
     }
 
-    const url = `${API_BASE_URL}/api/datasets/${datasetId}/timeseries?${params}`;
+    const path = `/api/datasets/${datasetId}/timeseries?${params}`;
 
     let isCurrent = true;
 
-    axios.get(url)
-      .then(response => {
+    getJson(path)
+      .then(data => {
         if (!isCurrent) return;
-        setData(response.data);
+        setData(data);
         setLoading(false);
       })
       .catch(err => {
@@ -85,14 +82,14 @@ export function useMarketInsights(datasetId, filters = null) {
     }
 
     const queryString = params.toString();
-    const url = `${API_BASE_URL}/api/datasets/${datasetId}/insights${queryString ? '?' + queryString : ''}`;
+    const path = `/api/datasets/${datasetId}/insights${queryString ? '?' + queryString : ''}`;
 
     let isCurrent = true;
 
-    axios.get(url)
-      .then(response => {
+    getJson(path)
+      .then(data => {
         if (!isCurrent) return;
-        setData(response.data);
+        setData(data);
         setLoading(false);
       })
       .catch(err => {
@@ -141,14 +138,14 @@ export function useTopAgents(datasetId, limit = 100, filters = null, search = nu
       params.append('search', search.trim());
     }
 
-    const url = `${API_BASE_URL}/api/datasets/${datasetId}/agents/top?${params}`;
+    const path = `/api/datasets/${datasetId}/agents/top?${params}`;
 
     let isCurrent = true;
 
-    axios.get(url)
-      .then(response => {
+    getJson(path)
+      .then(data => {
         if (!isCurrent) return;
-        setData(response.data);
+        setData(data);
         setLoading(false);
       })
       .catch(err => {
@@ -194,14 +191,14 @@ export function useAgentProfile(datasetId, regNum, filters = null) {
     }
 
     const queryString = params.toString();
-    const url = `${API_BASE_URL}/api/datasets/${datasetId}/agents/${regNum}${queryString ? '?' + queryString : ''}`;
+    const path = `/api/datasets/${datasetId}/agents/${regNum}${queryString ? '?' + queryString : ''}`;
 
     let isCurrent = true;
 
-    axios.get(url)
-      .then(response => {
+    getJson(path)
+      .then(data => {
         if (!isCurrent) return;
-        setData(response.data);
+        setData(data);
         setLoading(false);
       })
       .catch(err => {
