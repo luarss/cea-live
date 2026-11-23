@@ -1,6 +1,6 @@
 import { useAgentProfile } from '../../hooks/useAnalytics';
 import VolumeChart from '../visualizations/VolumeChart';
-import TownLine from '../visualizations/TownLine';
+import TownMap from '../visualizations/TownMap';
 import BarList from '../visualizations/BarList';
 import PropertyChip from '../ui/PropertyChip';
 import { ArrowLeftIcon } from '../ui/Icons';
@@ -122,7 +122,7 @@ export default function AgentProfile({ datasetId, regNum, filters, marketInsight
       </dl>
 
       <Section title="Where they work">
-        <TownLine towns={profile.topTowns} color={lineColor} townColor={propertyType('HDB').color} districtColor={districtColor} />
+        <TownMap towns={profile.topTowns} townColor={propertyType('HDB').color} districtColor={districtColor} />
       </Section>
 
       <Section title="Transactions per month">
