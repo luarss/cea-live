@@ -558,14 +558,13 @@ app.get('/api/datasets/:id/insights', (req, res) => {
     const { totalTransactions } = db.prepare(`SELECT COUNT(*) as totalTransactions FROM transactions${whereClause}`).get(...params);
 
     // Get date range
+    const datedRows = `FROM transactions ${whereClause ? whereClause + ' AND' : 'WHERE'} period_month IS NOT NULL`;
     const dateRangeQuery = `
       SELECT
-        MIN(transaction_date) as start,
-        MAX(transaction_date) as end
-      FROM transactions
-      ${whereClause ? whereClause + ' AND' : 'WHERE'} transaction_date IS NOT NULL AND transaction_date != '-'
+        (SELECT transaction_date ${datedRows} ORDER BY period_month ASC LIMIT 1) as start,
+        (SELECT transaction_date ${datedRows} ORDER BY period_month DESC LIMIT 1) as end
     `;
-    const dateRange = db.prepare(dateRangeQuery).get(...params);
+    const dateRange = db.prepare(dateRangeQuery).get(...params, ...params);
 
     // Property type distribution
     const propertyTypeQuery = `
@@ -904,14 +903,10 @@ app.get('/api/datasets/:id/agents/:regNum', (req, res) => {
     // Get date range
     const dateRangeQuery = `
       SELECT
-        MIN(transaction_date) as start,
-        MAX(transaction_date) as end
-      FROM transactions
-      WHERE salesperson_reg_num = ?
-        AND transaction_date IS NOT NULL
-        AND transaction_date != '-'
+        (SELECT transaction_date FROM transactions WHERE salesperson_reg_num = ? AND period_month IS NOT NULL ORDER BY period_month ASC LIMIT 1) as start,
+        (SELECT transaction_date FROM transactions WHERE salesperson_reg_num = ? AND period_month IS NOT NULL ORDER BY period_month DESC LIMIT 1) as end
     `;
-    const dateRange = db.prepare(dateRangeQuery).get(regNum);
+    const dateRange = db.prepare(dateRangeQuery).get(regNum, regNum);
 
     // Property type breakdown
     const propertyTypeQuery = `
