@@ -143,11 +143,11 @@ The voice is signage. Labels carry the meaning; the interface does not explain i
 
 **Key Characteristics:**
 - Near-black header band, white ground, flat ruled regions.
-- Five line colours, one per property type, used for chips, bars and the town line.
+- Five line colours, one per property type, used for chips, bars and town markers.
 - Signal orange as the single live/selection accent.
 - Source Sans 3 throughout, tabular numerals everywhere a number appears.
 - Pills for controls and chips; square corners for everything structural.
-- The town line: a 10px stroke with white lozenge stops.
+- The town map: numbered white station markers ringed in line colour on a schematic island.
 
 ## Colors
 
@@ -158,7 +158,7 @@ A neutral ink-on-white system with five transit line colours reserved for proper
 - **Signal Wash** (signal-wash): the ground of a selected table row and an active filter pill. Selection is a tint, not a fill.
 
 ### Secondary
-The line palette. Each colour belongs to exactly one property type and carries it wherever that type appears: chip background, bar fill, town-line stroke and stop ring.
+The line palette. Each colour belongs to exactly one property type and carries it wherever that type appears: chip background, bar fill and town-marker ring.
 - **HDB Line Green** (line-hdb): HDB.
 - **Condo Line Red** (line-condo): Condominium / apartment.
 - **Landed Line Brown** (line-landed): Landed.
@@ -233,9 +233,9 @@ Flat. Regions are divided by rules and tonal wash, never lifted. Only elements t
 
 ## Shapes
 
-Two shapes only. Anything you press or read as a badge is a full pill (9999px): search field, filter pills, buttons, property chips, town-line stops. Everything structural is square: tables, bars, bar tracks, figure strips, popovers, tooltips, checkboxes.
+Two shapes only. Anything you press or read as a badge is a full pill (9999px): search field, filter pills, buttons, property chips, town markers. Everything structural is square: tables, bars, bar tracks, figure strips, popovers, tooltips, checkboxes.
 
-The signature silhouette is the station lozenge: a 30 by 18px white pill with a 3px coloured ring, threaded on a 10px rounded line stroke.
+The signature silhouette is the station lozenge: a white stop with a 3px coloured ring, used as the numbered town marker on the map and beside each town in its list.
 
 ## Components
 
@@ -271,10 +271,12 @@ The signature silhouette is the station lozenge: a 30 by 18px white pill with a 
 ### Volume Chart
 - Square bars with an 8% gap, hairline horizontal gridlines, an ink baseline, 12px muted ticks, years only for long series. Bars take the agent's line colour (ink in the market view); the trailing provisional months are Stone. No entry animation.
 
-### Town Line (signature)
-- The agent's top towns stacked 38px apart, threaded on a 10px rounded stroke in the agent's dominant line colour.
-- Each stop is a station lozenge. Town stops ring in HDB green; district stops ("D19 · Serangoon Garden") ring in the colour of the agent's main private property type.
-- Each stop carries the place name in 600 and right-aligned tabular count and percentage.
+### Town Map (signature)
+- A schematic Singapore (main island, Sentosa, Pulau Ubin, Jurong Island) in Wash with a Hairline coast, no basemap, no roads.
+- Each of the agent's top towns is a station marker at its approximate centroid: white fill, 3px ring, rank number in 700 tabular ink. Radius grows with the square root of the count (8 to 17 units). Town markers ring in HDB green; district markers ("D19 · Serangoon Garden") ring in the colour of the agent's main private property type.
+- Overlapping markers are nudged apart rather than stacked; position is approximate, legibility wins.
+- Markers carry no name labels; the rank number links each marker to its row in the list.
+- Below the map, a ranked list repeats the same numbered marker beside the place name in 600 and right-aligned tabular count and percentage. Hovering a row or marker fills that marker with its line colour and dims the others to 30%.
 
 ### Figure Strip
 - A definition list framed top and bottom by 1px ink rules, cells split by hairlines; muted label above a bold tabular figure, with an optional muted sub-figure.
