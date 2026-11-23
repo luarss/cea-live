@@ -9,6 +9,11 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 const ROOT_DIR = join(__dirname, '..', '..');
 
+const LOCATION_SQL = `CASE
+  WHEN town IS NOT NULL AND town != '-' THEN town
+  WHEN district IS NOT NULL AND district != '-' THEN 'D' || district || ' ' || general_location
+END`;
+
 const app = express();
 const PORT = process.env.PORT || 3003;
 
@@ -830,17 +835,17 @@ app.get('/api/datasets/:id/agents/top', (req, res) => {
         topRepresentationMap.set(row.salesperson_reg_num, [row.represented, row.count]);
       });
 
-      // Batch query for top towns (excluding '-')
+      // Batch query for top locations (town, falling back to postal district)
       const topTownsQuery = `
         WITH ranked AS (
           SELECT
             salesperson_reg_num,
-            town,
+            ${LOCATION_SQL} as town,
             COUNT(*) as count,
             ROW_NUMBER() OVER (PARTITION BY salesperson_reg_num ORDER BY COUNT(*) DESC) as rank
           FROM transactions
-          ${batchWhere} AND town != '-'
-          GROUP BY salesperson_reg_num, town
+          ${batchWhere} AND ${LOCATION_SQL} IS NOT NULL
+          GROUP BY salesperson_reg_num, ${LOCATION_SQL}
         )
         SELECT salesperson_reg_num, town, count
         FROM ranked
@@ -905,6 +910,19 @@ app.get('/api/datasets/:id/agents/:regNum', (req, res) => {
   try {
     const { regNum } = req.params;
 
+    const parsedFilters = parseFilters(req.query.filters);
+    if (parsedFilters && parsedFilters.__parseError) {
+      return res.status(400).json({ error: 'Invalid filters format' });
+    }
+    const { conditions, params: filterParams, invalidField } = buildFilterConditions(parsedFilters);
+    if (invalidField) {
+      return res.status(400).json({ error: `Invalid filter field: ${invalidField}` });
+    }
+    const agentWhere = conditions
+      ? `WHERE salesperson_reg_num = ? AND ${conditions}`
+      : 'WHERE salesperson_reg_num = ?';
+    const agentParams = [regNum, ...filterParams];
+
     // Get agent basic info and transaction count
     const agentQuery = `
       SELECT
@@ -912,10 +930,10 @@ app.get('/api/datasets/:id/agents/:regNum', (req, res) => {
         salesperson_reg_num as regNum,
         COUNT(*) as totalTransactions
       FROM transactions
-      WHERE salesperson_reg_num = ?
+      ${agentWhere}
       GROUP BY salesperson_name, salesperson_reg_num
     `;
-    const agent = db.prepare(agentQuery).get(regNum);
+    const agent = db.prepare(agentQuery).get(...agentParams);
 
     if (!agent) {
       return res.status(404).json({ error: 'Agent not found' });
@@ -923,11 +941,11 @@ app.get('/api/datasets/:id/agents/:regNum', (req, res) => {
 
     // Get date range
     const dateRangeQuery = `
-      SELECT
-        (SELECT transaction_date FROM transactions WHERE salesperson_reg_num = ? AND period_month IS NOT NULL ORDER BY period_month ASC LIMIT 1) as start,
-        (SELECT transaction_date FROM transactions WHERE salesperson_reg_num = ? AND period_month IS NOT NULL ORDER BY period_month DESC LIMIT 1) as end
+      SELECT MIN(period_month) as start, MAX(period_month) as end
+      FROM transactions
+      ${agentWhere} AND period_month IS NOT NULL
     `;
-    const dateRange = db.prepare(dateRangeQuery).get(regNum, regNum);
+    const dateRange = db.prepare(dateRangeQuery).get(...agentParams);
 
     // Property type breakdown
     const propertyTypeQuery = `
@@ -936,11 +954,11 @@ app.get('/api/datasets/:id/agents/:regNum', (req, res) => {
         COUNT(*) as count,
         ROUND(CAST(COUNT(*) AS FLOAT) / ${agent.totalTransactions} * 100, 1) as percentage
       FROM transactions
-      WHERE salesperson_reg_num = ?
+      ${agentWhere}
       GROUP BY property_type
       ORDER BY count DESC
     `;
-    const propertyTypes = db.prepare(propertyTypeQuery).all(regNum);
+    const propertyTypes = db.prepare(propertyTypeQuery).all(...agentParams);
 
     // Transaction type breakdown
     const transactionTypeQuery = `
@@ -949,11 +967,11 @@ app.get('/api/datasets/:id/agents/:regNum', (req, res) => {
         COUNT(*) as count,
         ROUND(CAST(COUNT(*) AS FLOAT) / ${agent.totalTransactions} * 100, 1) as percentage
       FROM transactions
-      WHERE salesperson_reg_num = ?
+      ${agentWhere}
       GROUP BY transaction_type
       ORDER BY count DESC
     `;
-    const transactionTypes = db.prepare(transactionTypeQuery).all(regNum);
+    const transactionTypes = db.prepare(transactionTypeQuery).all(...agentParams);
 
     // Representation breakdown
     const representationQuery = `
@@ -962,36 +980,36 @@ app.get('/api/datasets/:id/agents/:regNum', (req, res) => {
         COUNT(*) as count,
         ROUND(CAST(COUNT(*) AS FLOAT) / ${agent.totalTransactions} * 100, 1) as percentage
       FROM transactions
-      WHERE salesperson_reg_num = ?
+      ${agentWhere}
       GROUP BY represented
       ORDER BY count DESC
     `;
-    const representation = db.prepare(representationQuery).all(regNum);
+    const representation = db.prepare(representationQuery).all(...agentParams);
 
-    // Top 10 towns
+    // Top 10 locations (town, falling back to postal district)
     const topTownsQuery = `
       SELECT
-        town,
+        ${LOCATION_SQL} as town,
         COUNT(*) as count,
         ROUND(CAST(COUNT(*) AS FLOAT) / ${agent.totalTransactions} * 100, 1) as percentage
       FROM transactions
-      WHERE salesperson_reg_num = ? AND town != '-'
-      GROUP BY town
+      ${agentWhere} AND ${LOCATION_SQL} IS NOT NULL
+      GROUP BY ${LOCATION_SQL}
       ORDER BY count DESC
       LIMIT 10
     `;
-    const topTowns = db.prepare(topTownsQuery).all(regNum);
+    const topTowns = db.prepare(topTownsQuery).all(...agentParams);
 
     // Monthly activity time series
     const monthlyActivityQuery = `
       SELECT period_month as period, COUNT(*) as count
       FROM transactions
-      WHERE salesperson_reg_num = ?
+      ${agentWhere}
         AND period_month IS NOT NULL
       GROUP BY period_month
       ORDER BY period_month
     `;
-    const monthlyActivity = db.prepare(monthlyActivityQuery).all(regNum);
+    const monthlyActivity = db.prepare(monthlyActivityQuery).all(...agentParams);
 
     res.json({
       agent,

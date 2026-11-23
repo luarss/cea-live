@@ -1,257 +1,203 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useTopAgents } from '../../hooks/useAnalytics';
 import AgentProfile from './AgentProfile';
-import FilterPanel from '../analytics/FilterPanel';
+import PropertyChip from '../ui/PropertyChip';
+import { formatLocation, formatNumber, representationLabel, titleCase, transactionLabel } from '../../lib/format';
 
-export default function AgentInsights({ datasetId }) {
-  const [filters, setFilters] = useState({});
-  const [selectedAgent, setSelectedAgent] = useState(null);
-  const [displayLimit, setDisplayLimit] = useState(50);
-  const [searchQuery, setSearchQuery] = useState('');
-  const [debouncedSearch, setDebouncedSearch] = useState('');
+const LIMIT_OPTIONS = [25, 50, 100, 250];
 
-  // Debounce search query with shorter delay
+function useDebouncedValue(value, delay) {
+  const [debouncedValue, setDebouncedValue] = useState(value);
+
   useEffect(() => {
-    const timer = setTimeout(() => {
-      setDebouncedSearch(searchQuery);
-    }, 300);
-
+    const timer = setTimeout(() => setDebouncedValue(value), delay);
     return () => clearTimeout(timer);
-  }, [searchQuery]);
+  }, [value, delay]);
 
-  const { data: agentData, loading } = useTopAgents(datasetId, displayLimit, filters, debouncedSearch);
+  return debouncedValue;
+}
 
-  // Use the agents from the API response (backend already applies search filter)
-  const filteredAgents = agentData?.agents || [];
+function TableSkeleton() {
+  return (
+    <div className="animate-pulse" aria-label="Loading salespersons">
+      {Array.from({ length: 10 }, (_, index) => (
+        <div key={index} className="h-14 border-b border-rule flex items-center gap-4">
+          <div className="h-4 w-6 bg-wash" />
+          <div className="h-4 flex-1 bg-wash" />
+          <div className="h-4 w-24 bg-wash" />
+        </div>
+      ))}
+    </div>
+  );
+}
 
-  if (loading) {
-    return (
-      <div className="flex items-center justify-center h-96">
-        <div className="text-gray-500">Loading agent insights...</div>
-      </div>
-    );
-  }
-
-  if (!agentData) {
-    return (
-      <div className="flex items-center justify-center h-96">
-        <div className="text-gray-500">No agent data available</div>
-      </div>
-    );
-  }
-
-  // If an agent is selected, show their profile
-  if (selectedAgent) {
-    return (
-      <AgentProfile
-        datasetId={datasetId}
-        regNum={selectedAgent}
-        onBack={() => setSelectedAgent(null)}
-      />
-    );
-  }
+function AgentRow({ agent, rank, maxTotal, isSelected, onSelect }) {
+  const topRepresentation = agent.topRepresentation?.[0];
+  const topTransaction = agent.topTransactionType?.[0];
 
   return (
-    <div className="space-y-6">
-      {/* Filter Panel */}
-      <FilterPanel filters={filters} onFiltersChange={setFilters} />
-
-      {/* Search Bar */}
-      <div className="card">
-        <div className="relative">
-          <input
-            type="text"
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            placeholder="Search by agent name or registration number..."
-            className="w-full px-4 py-3 pl-10 pr-4 text-gray-900 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent"
-          />
-          <svg
-            className="absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gray-400"
-            fill="none"
-            stroke="currentColor"
-            viewBox="0 0 24 24"
-          >
-            <path
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              strokeWidth={2}
-              d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"
-            />
-          </svg>
-          {searchQuery && (
-            <button
-              onClick={() => setSearchQuery('')}
-              className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-gray-600"
-            >
-              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-              </svg>
-            </button>
+    <tr
+      onClick={() => onSelect(agent.regNum)}
+      aria-selected={isSelected}
+      className={`border-b border-rule cursor-pointer transition-colors duration-150 ${
+        isSelected ? 'bg-signal-wash' : 'hover:bg-wash'
+      }`}
+    >
+      <td className="py-3 pl-2 pr-3 text-sm text-ink-muted tabular w-10 align-top">{rank ?? ''}</td>
+      <td className="py-3 pr-4 align-top">
+        <button
+          type="button"
+          onClick={event => {
+            event.stopPropagation();
+            onSelect(agent.regNum);
+          }}
+          className="text-left font-semibold hover:underline underline-offset-4 focus-visible:underline"
+        >
+          {titleCase(agent.name)}
+        </button>
+        <div className="flex items-center gap-2 mt-0.5">
+          <span className="text-xs text-ink-muted tabular">{agent.regNum}</span>
+          {agent.topPropertyType?.[0] && (
+            <span className="md:hidden"><PropertyChip value={agent.topPropertyType[0]} /></span>
           )}
         </div>
-      </div>
+      </td>
+      <td className="py-3 pr-4 align-top w-24 sm:w-40">
+        <div className="text-right font-bold tabular">{formatNumber(agent.totalTransactions)}</div>
+        <div className="mt-1.5 h-1.5 bg-wash hidden sm:block" aria-hidden="true">
+          <div className="h-full bg-ink" style={{ width: `${(agent.totalTransactions / maxTotal) * 100}%` }} />
+        </div>
+      </td>
+      <td className="py-3 pr-4 align-top hidden md:table-cell">
+        <div className="flex items-center gap-2">
+          {agent.topPropertyType?.[0] && <PropertyChip value={agent.topPropertyType[0]} />}
+          <span className="text-sm text-ink-soft whitespace-nowrap">
+            {topTransaction && transactionLabel(topTransaction)}
+            {topRepresentation && ` · ${representationLabel(topRepresentation).toLowerCase()}`}
+          </span>
+        </div>
+      </td>
+      <td className="py-3 pr-2 align-top text-sm hidden xl:table-cell whitespace-nowrap" title={formatLocation(agent.topTown?.[0], { full: true })}>
+        {agent.topTown?.[0] ? formatLocation(agent.topTown[0]) : <span className="text-ink-muted">Not recorded</span>}
+      </td>
+    </tr>
+  );
+}
 
-      {/* Summary Stats */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-        <div className="card">
-          <div className="text-sm text-gray-500 mb-1">Total Agents</div>
-          <div className="text-2xl font-bold">{agentData.total.toLocaleString()}</div>
-        </div>
-        <div className="card">
-          <div className="text-sm text-gray-500 mb-1">Showing Results</div>
-          <div className="text-2xl font-bold">{filteredAgents.length}</div>
-        </div>
-        <div className="card">
-          <div className="text-sm text-gray-500 mb-1">Display Limit</div>
-          <select
-            value={displayLimit}
-            onChange={(e) => setDisplayLimit(parseInt(e.target.value))}
-            className="mt-1 text-lg font-semibold border-none bg-transparent focus:outline-none cursor-pointer"
-          >
-            <option value={25}>25</option>
-            <option value={50}>50</option>
-            <option value={100}>100</option>
-            <option value={250}>250</option>
-          </select>
-        </div>
-      </div>
+export default function AgentInsights({ datasetId, filters, searchQuery, marketInsights, onLoadingChange }) {
+  const [selectedAgent, setSelectedAgent] = useState(null);
+  const [displayLimit, setDisplayLimit] = useState(50);
+  const [isProfileOpenOnMobile, setIsProfileOpenOnMobile] = useState(false);
+  const profileRef = useRef(null);
 
-      {/* Top Agents Leaderboard */}
-      <div className="card">
-        <h3 className="text-xl font-bold mb-4">Top Agents by Transaction Volume</h3>
-        <div className="overflow-x-auto">
-          <table className="w-full">
-            <thead>
-              <tr className="border-b border-gray-200">
-                <th className="text-left py-3 px-4 text-sm font-semibold text-gray-700">Rank</th>
-                <th className="text-left py-3 px-4 text-sm font-semibold text-gray-700">Agent Name</th>
-                <th className="text-left py-3 px-4 text-sm font-semibold text-gray-700">Registration #</th>
-                <th className="text-right py-3 px-4 text-sm font-semibold text-gray-700">Total Transactions</th>
-                <th className="text-left py-3 px-4 text-sm font-semibold text-gray-700">Top Property Type</th>
-                <th className="text-left py-3 px-4 text-sm font-semibold text-gray-700">Top Transaction Type</th>
-                <th className="text-left py-3 px-4 text-sm font-semibold text-gray-700">Primary Role</th>
-                <th className="text-left py-3 px-4 text-sm font-semibold text-gray-700">Actions</th>
-              </tr>
-            </thead>
-            <tbody>
-              {filteredAgents.map((agent, index) => (
-                <tr
-                  key={agent.regNum}
-                  className="border-b border-gray-100 hover:bg-gray-50 transition-colors"
-                >
-                  <td className="py-3 px-4">
-                    <div className="flex items-center">
-                      {index < 3 ? (
-                        <span className="text-2xl">
-                          {index === 0 ? '🥇' : index === 1 ? '🥈' : '🥉'}
-                        </span>
-                      ) : (
-                        <span className="font-semibold text-gray-600">#{index + 1}</span>
-                      )}
-                    </div>
-                  </td>
-                  <td className="py-3 px-4">
-                    <div className="font-medium text-gray-900">{agent.name}</div>
-                  </td>
-                  <td className="py-3 px-4">
-                    <div className="text-sm text-gray-500 font-mono">{agent.regNum}</div>
-                  </td>
-                  <td className="py-3 px-4 text-right">
-                    <div className="font-bold text-primary-600">{agent.totalTransactions.toLocaleString()}</div>
-                  </td>
-                  <td className="py-3 px-4">
-                    <div className="text-sm">
-                      <div className="font-medium">{agent.topPropertyType[0]}</div>
-                      <div className="text-gray-500">{agent.topPropertyType[1]} txns</div>
-                    </div>
-                  </td>
-                  <td className="py-3 px-4">
-                    <div className="text-sm">
-                      <div className="font-medium">{agent.topTransactionType[0]}</div>
-                      <div className="text-gray-500">{agent.topTransactionType[1]} txns</div>
-                    </div>
-                  </td>
-                  <td className="py-3 px-4">
-                    <div className="text-sm">
-                      <div className="font-medium">{agent.topRepresentation[0]}</div>
-                      <div className="text-gray-500">
-                        {((agent.topRepresentation[1] / agent.totalTransactions) * 100).toFixed(1)}%
-                      </div>
-                    </div>
-                  </td>
-                  <td className="py-3 px-4">
-                    <button
-                      onClick={() => setSelectedAgent(agent.regNum)}
-                      className="text-primary-600 hover:text-primary-700 font-medium text-sm"
-                    >
-                      View Profile →
-                    </button>
-                  </td>
-                </tr>
+  const debouncedSearch = useDebouncedValue(searchQuery, 250);
+  const { data: agentData, loading, error } = useTopAgents(datasetId, displayLimit, filters, debouncedSearch);
+  const agents = agentData?.agents || [];
+  const isSearching = Boolean(debouncedSearch?.trim());
+  const isSelectionVisible = agents.some(agent => agent.regNum === selectedAgent);
+  const activeAgent = isSelectionVisible || !agents.length ? selectedAgent : agents[0].regNum;
+
+  useEffect(() => {
+    onLoadingChange?.(loading);
+  }, [loading, onLoadingChange]);
+
+  const handleSelect = (regNum) => {
+    setSelectedAgent(regNum);
+    setIsProfileOpenOnMobile(true);
+    if (window.matchMedia('(max-width: 1023px)').matches) {
+      requestAnimationFrame(() => profileRef.current?.scrollIntoView({ block: 'start' }));
+    }
+  };
+
+  const maxTotal = Math.max(...agents.map(agent => agent.totalTransactions), 1);
+
+  return (
+    <div className="grid lg:grid-cols-[minmax(0,1fr)_400px] xl:grid-cols-[minmax(0,1fr)_440px] gap-x-10 gap-y-8">
+      <section aria-labelledby="ranking-heading" className={isProfileOpenOnMobile ? 'hidden lg:block' : ''}>
+        <div className="flex flex-wrap items-end justify-between gap-x-6 gap-y-2 pb-3 border-b-2 border-ink">
+          <div>
+            <h1 id="ranking-heading" className="text-2xl font-bold">
+              {isSearching ? `Results for “${debouncedSearch.trim()}”` : 'Most active salespersons'}
+            </h1>
+            {agentData && (
+              <p className="text-sm text-ink-muted mt-0.5 tabular">
+                {formatNumber(agentData.total)} {isSearching ? 'matching' : 'active'} salespersons
+              </p>
+            )}
+          </div>
+          <label className="text-sm text-ink-soft flex items-center gap-2">
+            Show
+            <select
+              value={displayLimit}
+              onChange={event => setDisplayLimit(parseInt(event.target.value, 10))}
+              className="h-8 border border-[#c9c9c5] bg-white px-2 font-semibold text-ink tabular hover:border-ink"
+            >
+              {LIMIT_OPTIONS.map(option => (
+                <option key={option} value={option}>{option}</option>
               ))}
-            </tbody>
-          </table>
-        </div>
-      </div>
-
-      {/* Distribution Insights */}
-      {filteredAgents.length > 0 && (
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          {/* Top 10 Agents Chart */}
-          <div className="card">
-            <h4 className="font-semibold mb-4">Top 10 Agents by Volume</h4>
-            <div className="space-y-3">
-              {filteredAgents.slice(0, 10).map((agent, index) => (
-              <div key={agent.regNum} className="flex items-center gap-3">
-                <div className="w-8 text-sm font-semibold text-gray-600">#{index + 1}</div>
-                <div className="flex-1">
-                  <div className="flex justify-between items-center mb-1">
-                    <div className="text-sm font-medium truncate">{agent.name}</div>
-                    <div className="text-sm font-bold text-primary-600 ml-2">
-                      {agent.totalTransactions}
-                    </div>
-                  </div>
-                  <div className="w-full bg-gray-200 rounded-full h-2">
-                    <div
-                      className="bg-primary-500 h-2 rounded-full transition-all"
-                      style={{
-                        width: `${(agent.totalTransactions / filteredAgents[0].totalTransactions) * 100}%`
-                      }}
-                    ></div>
-                  </div>
-                </div>
-              </div>
-            ))}
-          </div>
+            </select>
+          </label>
         </div>
 
-        {/* Market Coverage */}
-        <div className="card">
-          <h4 className="font-semibold mb-4">Market Coverage Statistics</h4>
-          <div className="space-y-4">
-            <div>
-              <div className="text-sm text-gray-500 mb-1">Average Transactions per Agent</div>
-              <div className="text-2xl font-bold">
-                {agentData.statistics.averageTransactions.toLocaleString()}
-              </div>
-            </div>
-            <div>
-              <div className="text-sm text-gray-500 mb-1">Top Agent Market Share</div>
-              <div className="text-2xl font-bold text-primary-600">
-                {agentData.statistics.topAgentMarketShare}%
-              </div>
-            </div>
-            <div>
-              <div className="text-sm text-gray-500 mb-1">Top 10 Combined Market Share</div>
-              <div className="text-2xl font-bold text-primary-600">
-                {agentData.statistics.top10MarketShare}%
-              </div>
-            </div>
+        {error && !agentData && (
+          <p className="py-10 text-ink-soft">Couldn’t load salespersons ({error}). Check your connection and reload.</p>
+        )}
+
+        {!agentData && !error && <TableSkeleton />}
+
+        {agentData && agents.length === 0 && (
+          <div className="py-12 max-w-md">
+            <p className="font-semibold">No salesperson matches “{debouncedSearch}”.</p>
+            <p className="text-sm text-ink-soft mt-1">
+              Check the spelling, try part of the name, or search the registration number (e.g. R043039D). Filters above also narrow the list.
+            </p>
           </div>
-        </div>
-        </div>
-      )}
+        )}
+
+        {agents.length > 0 && (
+          <div className={`overflow-x-auto transition-opacity duration-200 ${loading ? 'opacity-60' : ''}`}>
+            <table className="w-full">
+              <thead>
+                <tr className="text-left text-xs font-semibold text-ink-muted border-b border-rule">
+                  <th scope="col" className="py-2 pl-2 pr-3 font-semibold"><span className="sr-only">Rank</span>#</th>
+                  <th scope="col" className="py-2 pr-4 font-semibold">Salesperson</th>
+                  <th scope="col" className="py-2 pr-4 font-semibold text-right">Transactions</th>
+                  <th scope="col" className="py-2 pr-4 font-semibold hidden md:table-cell">Mostly</th>
+                  <th scope="col" className="py-2 pr-2 font-semibold hidden xl:table-cell">Top area</th>
+                </tr>
+              </thead>
+              <tbody>
+                {agents.map((agent, index) => (
+                  <AgentRow
+                    key={agent.regNum}
+                    agent={agent}
+                    rank={isSearching ? null : index + 1}
+                    maxTotal={maxTotal}
+                    isSelected={agent.regNum === activeAgent}
+                    onSelect={handleSelect}
+                  />
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </section>
+
+      <aside
+        ref={profileRef}
+        aria-label="Salesperson record"
+        className={`${isProfileOpenOnMobile ? '' : 'hidden lg:block'} lg:sticky lg:top-4 lg:self-start lg:max-h-[calc(100vh-2rem)] lg:overflow-y-auto lg:pr-3 panel-scroll`}
+      >
+        {agents.length > 0 && (
+          <AgentProfile
+            datasetId={datasetId}
+            regNum={activeAgent}
+            filters={filters}
+            marketInsights={marketInsights}
+            onClose={() => setIsProfileOpenOnMobile(false)}
+          />
+        )}
+      </aside>
     </div>
   );
 }

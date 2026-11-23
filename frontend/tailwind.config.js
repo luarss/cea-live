@@ -5,38 +5,35 @@ export default {
   ],
   theme: {
     extend: {
+      fontFamily: {
+        sans: ['"Source Sans 3"', 'system-ui', '-apple-system', 'Segoe UI', 'sans-serif'],
+      },
       colors: {
-        primary: {
-          50: '#f0f9ff',
-          100: '#e0f2fe',
-          200: '#bae6fd',
-          300: '#7dd3fc',
-          400: '#38bdf8',
-          500: '#0ea5e9',
-          600: '#0284c7',
-          700: '#0369a1',
-          800: '#075985',
-          900: '#0c4a6e',
+        ink: {
+          DEFAULT: '#1a1a1a',
+          soft: '#4a4a4a',
+          muted: '#6b6b6b',
         },
-        secondary: {
-          500: '#8b5cf6',
-          600: '#7c3aed',
-        }
-      },
-      animation: {
-        'fade-in': 'fadeIn 0.3s ease-in',
-        'slide-up': 'slideUp 0.4s ease-out',
-      },
-      keyframes: {
-        fadeIn: {
-          '0%': { opacity: '0' },
-          '100%': { opacity: '1' },
+        rule: {
+          DEFAULT: '#e3e3e0',
+          strong: '#1a1a1a',
         },
-        slideUp: {
-          '0%': { transform: 'translateY(20px)', opacity: '0' },
-          '100%': { transform: 'translateY(0)', opacity: '1' },
-        }
-      }
+        wash: '#f5f5f3',
+        signal: {
+          DEFAULT: '#fa9e0d',
+          wash: '#fff4e0',
+        },
+        line: {
+          hdb: '#007a3d',
+          condo: '#d42e12',
+          landed: '#9d5b25',
+          ec: '#9900aa',
+          strata: '#005ec4',
+        },
+      },
+      maxWidth: {
+        shell: '1440px',
+      },
     },
   },
   plugins: [],

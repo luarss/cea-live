@@ -1,272 +1,150 @@
 import { useAgentProfile } from '../../hooks/useAnalytics';
-import PieChart from '../visualizations/PieChart';
-import LineChart from '../visualizations/LineChart';
-import BarChart from '../visualizations/BarChart';
+import VolumeChart from '../visualizations/VolumeChart';
+import TownLine from '../visualizations/TownLine';
+import BarList from '../visualizations/BarList';
+import PropertyChip from '../ui/PropertyChip';
+import { ArrowLeftIcon } from '../ui/Icons';
+import {
+  formatNumber,
+  formatPeriod,
+  propertyType,
+  representationLabel,
+  titleCase,
+  toIsoPeriod,
+  transactionLabel,
+} from '../../lib/format';
 
-export default function AgentProfile({ datasetId, regNum, onBack }) {
-  const { data: profile, loading, error } = useAgentProfile(datasetId, regNum);
+function toBarItems(entries, key) {
+  return entries.map(entry => ({ name: entry[key], count: entry.count, percentage: entry.percentage }));
+}
 
-  if (loading) {
+function Section({ title, children }) {
+  return (
+    <section className="pt-5 mt-5 border-t border-rule">
+      <h3 className="text-[13px] font-bold uppercase tracking-[0.06em] text-ink-soft mb-4">{title}</h3>
+      {children}
+    </section>
+  );
+}
+
+function ProfileSkeleton() {
+  return (
+    <div className="animate-pulse" aria-label="Loading salesperson record">
+      <div className="h-7 w-2/3 bg-wash" />
+      <div className="h-4 w-1/3 bg-wash mt-3" />
+      <div className="h-16 bg-wash mt-6" />
+      <div className="h-48 bg-wash mt-6" />
+    </div>
+  );
+}
+
+export default function AgentProfile({ datasetId, regNum, filters, marketInsights, onClose }) {
+  const { data: profile, loading, error } = useAgentProfile(datasetId, regNum, filters);
+  const hasActiveFilters = Object.values(filters || {}).some(values => values?.length > 0);
+
+  if (!regNum) {
     return (
-      <div className="flex items-center justify-center h-96">
-        <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary-500 mx-auto mb-4"></div>
-          <p className="text-gray-600">Loading agent profile...</p>
-        </div>
-      </div>
+      <p className="text-ink-muted">
+        Pick a salesperson from the list to see their full record.
+      </p>
     );
   }
 
   if (error) {
     return (
-      <div className="flex items-center justify-center h-96">
-        <div className="text-center max-w-md">
-          <div className="text-red-500 text-5xl mb-4">⚠️</div>
-          <h2 className="text-xl font-semibold text-gray-800 mb-2">Failed to Load Profile</h2>
-          <p className="text-gray-600 mb-4">{error}</p>
-          <button onClick={onBack} className="btn-primary">
-            Go Back
-          </button>
-        </div>
+      <div>
+        <h2 className="text-lg font-bold">Couldn’t load this record</h2>
+        <p className="text-ink-soft mt-1 text-sm">{error}. Pick the salesperson again, or reload the page.</p>
       </div>
     );
   }
 
-  if (!profile) {
-    return null;
+  if (loading && profile?.agent?.regNum !== regNum) {
+    return <ProfileSkeleton />;
   }
 
-  // Format data for charts
-  const propertyTypeChartData = profile.propertyTypes.map(pt => ({
-    name: pt.type,
-    value: pt.count
-  }));
+  if (!profile) return null;
 
-  const transactionTypeChartData = profile.transactionTypes.map(tt => ({
-    name: tt.type,
-    value: tt.count
-  }));
-
-  const representationChartData = profile.representation.map(r => ({
-    name: r.type,
-    value: r.count
-  }));
-
-  const townChartData = profile.topTowns.map(t => ({
-    name: t.town,
-    count: t.count
-  }));
-
-  const activityChartData = profile.monthlyActivity.map(m => ({
-    period: m.period,
-    count: m.count
-  }));
+  const dominantType = profile.propertyTypes[0]?.type;
+  const lineColor = propertyType(dominantType).color;
+  const dominantPrivateType = profile.propertyTypes.find(entry => entry.type !== 'HDB')?.type;
+  const districtColor = propertyType(dominantPrivateType || 'CONDOMINIUM_APARTMENTS').color;
+  const marketTotal = marketInsights?.summary?.totalTransactions;
+  const latestPeriod = toIsoPeriod(marketInsights?.summary?.dateRange?.end);
+  const shareOfMarket = marketTotal ? (profile.agent.totalTransactions / marketTotal) * 100 : null;
+  const marketPropertyMix = marketInsights?.distributions?.propertyTypes;
+  const topRepresentation = profile.representation[0];
+  const topTransaction = profile.transactionTypes[0];
 
   return (
-    <div className="space-y-6">
-      {/* Back Button */}
-      <button
-        onClick={onBack}
-        className="flex items-center gap-2 text-primary-600 hover:text-primary-700 font-medium"
-      >
-        ← Back to All Agents
-      </button>
+    <article aria-labelledby="agent-name">
+      {onClose && (
+        <button
+          type="button"
+          onClick={onClose}
+          className="lg:hidden mb-4 inline-flex items-center gap-2 text-sm font-semibold text-ink-soft hover:text-ink"
+        >
+          <ArrowLeftIcon className="w-4 h-4" /> Back to list
+        </button>
+      )}
 
-      {/* Agent Header */}
-      <div className="card">
-        <div className="flex items-start justify-between">
-          <div>
-            <h2 className="text-3xl font-bold text-gray-900">{profile.agent.name}</h2>
-            <p className="text-gray-500 mt-1 font-mono">Reg #{profile.agent.regNum}</p>
-          </div>
-          <div className="text-right">
-            <div className="text-sm text-gray-500">Total Transactions</div>
-            <div className="text-4xl font-bold text-primary-600">
-              {profile.agent.totalTransactions.toLocaleString()}
-            </div>
-          </div>
+      <div className="flex items-start justify-between gap-4">
+        <div className="min-w-0">
+          <h2 id="agent-name" className="text-2xl font-bold leading-tight text-balance">{titleCase(profile.agent.name)}</h2>
+          <p className="text-sm text-ink-muted mt-1 tabular">
+            {profile.agent.regNum} · active {formatPeriod(profile.dateRange.start)} – {formatPeriod(profile.dateRange.end)}
+          </p>
+          {hasActiveFilters && (
+            <p className="text-xs font-semibold text-ink-soft mt-1">Showing only deals that match your filters</p>
+          )}
         </div>
-
-        <div className="mt-6 pt-6 border-t border-gray-200">
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            <div>
-              <div className="text-sm text-gray-500 mb-1">Active Period</div>
-              <div className="font-semibold">
-                {profile.dateRange.start} - {profile.dateRange.end}
-              </div>
-            </div>
-            <div>
-              <div className="text-sm text-gray-500 mb-1">Most Common Property Type</div>
-              <div className="font-semibold">{profile.propertyTypes[0].type}</div>
-              <div className="text-sm text-gray-600">{profile.propertyTypes[0].percentage}% of transactions</div>
-            </div>
-            <div>
-              <div className="text-sm text-gray-500 mb-1">Primary Transaction Type</div>
-              <div className="font-semibold">{profile.transactionTypes[0].type}</div>
-              <div className="text-sm text-gray-600">{profile.transactionTypes[0].percentage}% of transactions</div>
-            </div>
-          </div>
-        </div>
+        {dominantType && <PropertyChip value={dominantType} size="lg" />}
       </div>
 
-      {/* Activity Over Time */}
-      <div className="card">
-        <h3 className="text-xl font-bold mb-4">Transaction Activity Over Time</h3>
-        <LineChart
-          data={activityChartData}
-          xKey="period"
-          lines={['count']}
-          title="Monthly Transaction Volume"
+      <dl className="grid grid-cols-2 mt-5 border-y border-ink">
+        <div className="py-3 pr-4">
+          <dt className="text-xs text-ink-muted">Recorded transactions</dt>
+          <dd className="text-2xl font-bold tabular">{formatNumber(profile.agent.totalTransactions)}</dd>
+          {shareOfMarket !== null && (
+            <dd className="text-xs text-ink-muted tabular">{shareOfMarket.toFixed(2)}% of all recorded deals</dd>
+          )}
+        </div>
+        <div className="py-3 pl-4 border-l border-rule">
+          <dt className="text-xs text-ink-muted">Usually</dt>
+          <dd className="font-semibold leading-snug mt-1">
+            {topTransaction ? transactionLabel(topTransaction.type) : '–'}
+            {topRepresentation && <>, for the {representationLabel(topRepresentation.type).toLowerCase()}</>}
+          </dd>
+          {topRepresentation && (
+            <dd className="text-xs text-ink-muted tabular">{topRepresentation.percentage}% of their deals</dd>
+          )}
+        </div>
+      </dl>
+
+      <Section title="Where they work">
+        <TownLine towns={profile.topTowns} color={lineColor} townColor={propertyType('HDB').color} districtColor={districtColor} />
+      </Section>
+
+      <Section title="Transactions per month">
+        <VolumeChart series={profile.monthlyActivity} latestPeriod={latestPeriod} color={lineColor} height={140} />
+      </Section>
+
+      <Section title="Property mix vs the market">
+        <BarList
+          items={toBarItems(profile.propertyTypes, 'type')}
+          compareTo={marketPropertyMix}
+          renderLabel={name => propertyType(name).label}
+          colorFor={name => propertyType(name).color}
         />
-      </div>
+      </Section>
 
-      {/* Distribution Charts */}
-      <div>
-        <h3 className="text-xl font-bold mb-4">Transaction Breakdown</h3>
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          <div className="card">
-            <PieChart
-              data={propertyTypeChartData}
-              dataKey="value"
-              nameKey="name"
-              title="Property Types"
-            />
-          </div>
-          <div className="card">
-            <PieChart
-              data={transactionTypeChartData}
-              dataKey="value"
-              nameKey="name"
-              title="Transaction Types"
-            />
-          </div>
-          <div className="card">
-            <PieChart
-              data={representationChartData}
-              dataKey="value"
-              nameKey="name"
-              title="Representation"
-            />
-          </div>
-        </div>
-      </div>
+      <Section title="Acting for">
+        <BarList items={toBarItems(profile.representation, 'type')} renderLabel={representationLabel} />
+      </Section>
 
-      {/* Top Towns */}
-      <div className="card">
-        <h3 className="text-xl font-bold mb-4">Top 10 Towns by Activity</h3>
-        <BarChart
-          data={townChartData}
-          xKey="name"
-          yKey="count"
-          title="Transaction Count by Town"
-        />
-      </div>
-
-      {/* Detailed Statistics Tables */}
-      <div>
-        <h3 className="text-xl font-bold mb-4">Detailed Statistics</h3>
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          {/* Property Types Table */}
-          <div className="card">
-            <h4 className="font-semibold mb-3">Property Type Distribution</h4>
-            <div className="overflow-x-auto">
-              <table className="w-full">
-                <thead>
-                  <tr className="border-b border-gray-200">
-                    <th className="text-left py-2 text-sm font-semibold text-gray-700">Type</th>
-                    <th className="text-right py-2 text-sm font-semibold text-gray-700">Count</th>
-                    <th className="text-right py-2 text-sm font-semibold text-gray-700">%</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {profile.propertyTypes.map((pt, index) => (
-                    <tr key={index} className="border-b border-gray-100">
-                      <td className="py-2 text-sm">{pt.type}</td>
-                      <td className="py-2 text-sm text-right font-medium">{pt.count}</td>
-                      <td className="py-2 text-sm text-right text-primary-600">{pt.percentage}%</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </div>
-
-          {/* Transaction Types Table */}
-          <div className="card">
-            <h4 className="font-semibold mb-3">Transaction Type Distribution</h4>
-            <div className="overflow-x-auto">
-              <table className="w-full">
-                <thead>
-                  <tr className="border-b border-gray-200">
-                    <th className="text-left py-2 text-sm font-semibold text-gray-700">Type</th>
-                    <th className="text-right py-2 text-sm font-semibold text-gray-700">Count</th>
-                    <th className="text-right py-2 text-sm font-semibold text-gray-700">%</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {profile.transactionTypes.map((tt, index) => (
-                    <tr key={index} className="border-b border-gray-100">
-                      <td className="py-2 text-sm">{tt.type}</td>
-                      <td className="py-2 text-sm text-right font-medium">{tt.count}</td>
-                      <td className="py-2 text-sm text-right text-primary-600">{tt.percentage}%</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </div>
-
-          {/* Representation Table */}
-          <div className="card">
-            <h4 className="font-semibold mb-3">Representation Breakdown</h4>
-            <div className="overflow-x-auto">
-              <table className="w-full">
-                <thead>
-                  <tr className="border-b border-gray-200">
-                    <th className="text-left py-2 text-sm font-semibold text-gray-700">Type</th>
-                    <th className="text-right py-2 text-sm font-semibold text-gray-700">Count</th>
-                    <th className="text-right py-2 text-sm font-semibold text-gray-700">%</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {profile.representation.map((r, index) => (
-                    <tr key={index} className="border-b border-gray-100">
-                      <td className="py-2 text-sm">{r.type}</td>
-                      <td className="py-2 text-sm text-right font-medium">{r.count}</td>
-                      <td className="py-2 text-sm text-right text-primary-600">{r.percentage}%</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </div>
-
-          {/* Top Towns Table */}
-          <div className="card">
-            <h4 className="font-semibold mb-3">Top Towns</h4>
-            <div className="overflow-x-auto">
-              <table className="w-full">
-                <thead>
-                  <tr className="border-b border-gray-200">
-                    <th className="text-left py-2 text-sm font-semibold text-gray-700">Town</th>
-                    <th className="text-right py-2 text-sm font-semibold text-gray-700">Count</th>
-                    <th className="text-right py-2 text-sm font-semibold text-gray-700">%</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {profile.topTowns.map((t, index) => (
-                    <tr key={index} className="border-b border-gray-100">
-                      <td className="py-2 text-sm">{t.town}</td>
-                      <td className="py-2 text-sm text-right font-medium">{t.count}</td>
-                      <td className="py-2 text-sm text-right text-primary-600">{t.percentage}%</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </div>
-        </div>
-      </div>
-    </div>
+      <Section title="Deal type">
+        <BarList items={toBarItems(profile.transactionTypes, 'type')} renderLabel={transactionLabel} />
+      </Section>
+    </article>
   );
 }

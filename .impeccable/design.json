@@ -1,0 +1,459 @@
+{
+  "schemaVersion": 2,
+  "generatedAt": "2026-11-23T02:20:05+00:00",
+  "title": "Design System: CEA-VIZ",
+  "extensions": {
+    "colorMeta": {
+      "ink": {
+        "role": "neutral",
+        "displayName": "Signage Ink",
+        "canonical": "#1a1a1a",
+        "tonalRamp": [
+          "#080808",
+          "#0d0d0d",
+          "#121212",
+          "#171717",
+          "#484848",
+          "#818181",
+          "#bababa",
+          "#e8e8e8"
+        ]
+      },
+      "ink-soft": {
+        "role": "neutral",
+        "displayName": "Ink Soft",
+        "canonical": "#4a4a4a",
+        "tonalRamp": [
+          "#161616",
+          "#252525",
+          "#343434",
+          "#414141",
+          "#6e6e6e",
+          "#9b9b9b",
+          "#c9c9c9",
+          "#ededed"
+        ]
+      },
+      "ink-muted": {
+        "role": "neutral",
+        "displayName": "Ink Muted",
+        "canonical": "#6b6b6b",
+        "tonalRamp": [
+          "#202020",
+          "#363636",
+          "#4b4b4b",
+          "#5e5e5e",
+          "#898989",
+          "#aeaeae",
+          "#d3d3d3",
+          "#f0f0f0"
+        ]
+      },
+      "rule": {
+        "role": "neutral",
+        "displayName": "Hairline",
+        "canonical": "#e3e3e0",
+        "tonalRamp": [
+          "#444443",
+          "#727270",
+          "#9f9f9d",
+          "#c8c8c5",
+          "#e9e9e6",
+          "#f0f0ee",
+          "#f7f7f6",
+          "#fcfcfc"
+        ]
+      },
+      "stone": {
+        "role": "neutral",
+        "displayName": "Stone",
+        "canonical": "#c9c9c5",
+        "tonalRamp": [
+          "#3c3c3b",
+          "#646462",
+          "#8d8d8a",
+          "#b1b1ad",
+          "#d4d4d1",
+          "#e1e1df",
+          "#efefee",
+          "#fafaf9"
+        ]
+      },
+      "market-grey": {
+        "role": "neutral",
+        "displayName": "Market Grey",
+        "canonical": "#b5b5b0",
+        "tonalRamp": [
+          "#363635",
+          "#5a5a58",
+          "#7f7f7b",
+          "#9f9f9b",
+          "#c4c4c0",
+          "#d6d6d4",
+          "#e9e9e7",
+          "#f8f8f7"
+        ]
+      },
+      "wash": {
+        "role": "neutral",
+        "displayName": "Wash",
+        "canonical": "#f5f5f3",
+        "tonalRamp": [
+          "#4a4a49",
+          "#7a7a7a",
+          "#acacaa",
+          "#d8d8d6",
+          "#f7f7f5",
+          "#fafaf8",
+          "#fcfcfb",
+          "#fefefe"
+        ]
+      },
+      "paper": {
+        "role": "neutral",
+        "displayName": "Paper",
+        "canonical": "#ffffff",
+        "tonalRamp": [
+          "#4c4c4c",
+          "#808080",
+          "#b2b2b2",
+          "#e0e0e0",
+          "#ffffff",
+          "#ffffff",
+          "#ffffff",
+          "#ffffff"
+        ]
+      },
+      "signal": {
+        "role": "primary",
+        "displayName": "Platform Signal Orange",
+        "canonical": "#fa9e0d",
+        "tonalRamp": [
+          "#4b2f04",
+          "#7d4f06",
+          "#af6f09",
+          "#dc8b0b",
+          "#fbb13d",
+          "#fcca7a",
+          "#fee2b6",
+          "#fef5e7"
+        ]
+      },
+      "signal-wash": {
+        "role": "primary",
+        "displayName": "Signal Wash",
+        "canonical": "#fff4e0",
+        "tonalRamp": [
+          "#4c4943",
+          "#807a70",
+          "#b2ab9d",
+          "#e0d7c5",
+          "#fff6e6",
+          "#fff9ee",
+          "#fffcf6",
+          "#fffefc"
+        ]
+      },
+      "line-hdb": {
+        "role": "secondary",
+        "displayName": "HDB Line Green",
+        "canonical": "#007a3d",
+        "tonalRamp": [
+          "#002512",
+          "#003d1e",
+          "#00552b",
+          "#006b36",
+          "#339564",
+          "#73b694",
+          "#b2d7c5",
+          "#e6f2ec"
+        ]
+      },
+      "line-condo": {
+        "role": "secondary",
+        "displayName": "Condo Line Red",
+        "canonical": "#d42e12",
+        "tonalRamp": [
+          "#400e05",
+          "#6a1709",
+          "#94200d",
+          "#bb2810",
+          "#dd5841",
+          "#e78c7d",
+          "#f2c0b8",
+          "#fbeae7"
+        ]
+      },
+      "line-landed": {
+        "role": "secondary",
+        "displayName": "Landed Line Brown",
+        "canonical": "#9d5b25",
+        "tonalRamp": [
+          "#2f1b0b",
+          "#4e2e12",
+          "#6e401a",
+          "#8a5021",
+          "#b17c51",
+          "#c9a587",
+          "#e2cebe",
+          "#f5efe9"
+        ]
+      },
+      "line-ec": {
+        "role": "secondary",
+        "displayName": "EC Line Purple",
+        "canonical": "#9900aa",
+        "tonalRamp": [
+          "#2e0033",
+          "#4c0055",
+          "#6b0077",
+          "#870096",
+          "#ad33bb",
+          "#c773d0",
+          "#e0b2e6",
+          "#f5e6f6"
+        ]
+      },
+      "line-strata": {
+        "role": "secondary",
+        "displayName": "Strata Line Blue",
+        "canonical": "#005ec4",
+        "tonalRamp": [
+          "#001c3b",
+          "#002f62",
+          "#004289",
+          "#0053ac",
+          "#337ed0",
+          "#73a6df",
+          "#b2cfed",
+          "#e6eff9"
+        ]
+      }
+    },
+    "typographyMeta": {
+      "wordmark": {
+        "displayName": "Wordmark",
+        "purpose": "CEA-VIZ wordmark in the header band."
+      },
+      "figure": {
+        "displayName": "Figure",
+        "purpose": "Headline numbers in the market figure strip."
+      },
+      "headline": {
+        "displayName": "Headline",
+        "purpose": "View titles and the agent's name; also the agent total."
+      },
+      "title": {
+        "displayName": "Title",
+        "purpose": "Chart titles in the market view."
+      },
+      "body": {
+        "displayName": "Body",
+        "purpose": "Base text; names in the table at 600."
+      },
+      "meta": {
+        "displayName": "Meta",
+        "purpose": "Counts under titles, row details, bar-list labels."
+      },
+      "section-label": {
+        "displayName": "Section Label",
+        "purpose": "Uppercase Ink Soft heading of each profile section and market breakdown, set like a station sign."
+      },
+      "label": {
+        "displayName": "Label",
+        "purpose": "Column heads, figure labels, registration numbers, axis ticks."
+      },
+      "chip": {
+        "displayName": "Chip",
+        "purpose": "Property station codes in white on line colour."
+      }
+    },
+    "shadows": [
+      {
+        "name": "popover",
+        "value": "0 8px 24px rgba(0,0,0,0.12)",
+        "purpose": "Filter dropdown menu only, with a 1px ink border."
+      },
+      {
+        "name": "tooltip",
+        "value": "0 4px 16px rgba(0,0,0,0.18)",
+        "purpose": "Chart tooltip on ink ground only."
+      }
+    ],
+    "motion": [
+      {
+        "name": "state-color",
+        "value": "150ms cubic-bezier(0.4, 0, 0.2, 1)",
+        "purpose": "Colour and border changes on tabs, pills, rows; chevron rotation."
+      },
+      {
+        "name": "updating-fade",
+        "value": "opacity 200ms cubic-bezier(0.4, 0, 0.2, 1), to 0.6",
+        "purpose": "Dims a region while filtered data reloads; the Updating note fades in."
+      },
+      {
+        "name": "chart-static",
+        "value": "none",
+        "purpose": "Charts render without entry animation."
+      }
+    ],
+    "breakpoints": [
+      {
+        "name": "sm",
+        "value": "640px"
+      },
+      {
+        "name": "md",
+        "value": "768px"
+      },
+      {
+        "name": "lg",
+        "value": "1024px"
+      },
+      {
+        "name": "xl",
+        "value": "1280px"
+      },
+      {
+        "name": "shell-max",
+        "value": "1440px"
+      }
+    ],
+    "focus": {
+      "value": "outline: 2px solid #fa9e0d; outline-offset: 2px",
+      "purpose": "Global :focus-visible; the search pill uses a 3px signal ring."
+    }
+  },
+  "components": [
+    {
+      "name": "Header Band",
+      "kind": "nav",
+      "refersTo": "header-band",
+      "description": "Near-black wayfinding band: wordmark, view tabs with signal underline, pill search.",
+      "html": "<header class=\"ds-band\"><span class=\"ds-mark\">CEA-VIZ</span><nav class=\"ds-tabs\"><a class=\"ds-tab ds-tab-on\" href=\"#\">Salespersons</a><a class=\"ds-tab\" href=\"#\">Market</a></nav><label class=\"ds-search\"><svg viewBox=\"0 0 24 24\" width=\"16\" height=\"16\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2.25\" stroke-linecap=\"round\"><circle cx=\"11\" cy=\"11\" r=\"7\"/><path d=\"m20 20-3.5-3.5\"/></svg><input placeholder=\"Name or registration no.\"></label></header>",
+      "css": ".ds-band{font-family:'Source Sans 3',system-ui,-apple-system,'Segoe UI',sans-serif;background:#1a1a1a;color:#fff;display:flex;flex-wrap:wrap;align-items:center;gap:12px 32px;padding:12px 24px;} .ds-mark{font-size:20px;font-weight:700;letter-spacing:-0.025em;} .ds-tabs{display:flex;gap:24px;} .ds-tab{padding:8px 0;font-size:15px;font-weight:600;color:#b8b8b4;text-decoration:none;border-bottom:3px solid transparent;transition:color .15s;} .ds-tab:hover{color:#fff;} .ds-tab-on{color:#fff;border-bottom-color:#fa9e0d;} .ds-tab:focus-visible{outline:2px solid #fa9e0d;outline-offset:2px;} .ds-search{position:relative;flex:1;min-width:240px;max-width:448px;margin-left:auto;display:flex;align-items:center;} .ds-search svg{position:absolute;left:16px;color:#6b6b6b;} .ds-search input{width:100%;height:44px;border:0;border-radius:9999px;background:#fff;color:#1a1a1a;padding:0 44px;font:inherit;font-size:15px;} .ds-search input:focus-visible{outline:none;box-shadow:0 0 0 3px #fa9e0d;}"
+    },
+    {
+      "name": "Filter Pill",
+      "kind": "chip",
+      "refersTo": "filter-pill",
+      "description": "Toolbar multi-select trigger: muted field name, bold value, chevron; active turns signal wash.",
+      "html": "<div class=\"ds-filters\"><button class=\"ds-filter\"><span class=\"ds-filter-k\">Property</span><b>Any</b><svg viewBox=\"0 0 24 24\" width=\"16\" height=\"16\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2.25\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><path d=\"m6 9 6 6 6-6\"/></svg></button><button class=\"ds-filter ds-filter-on\"><span class=\"ds-filter-k\">Deal type</span><b>Resale</b><svg viewBox=\"0 0 24 24\" width=\"16\" height=\"16\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2.25\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><path d=\"m6 9 6 6 6-6\"/></svg></button></div>",
+      "css": ".ds-filters{display:flex;gap:8px;flex-wrap:wrap;} .ds-filter{font-family:'Source Sans 3',system-ui,-apple-system,'Segoe UI',sans-serif;height:36px;padding:0 12px 0 16px;border-radius:9999px;border:1px solid #c9c9c5;background:#fff;color:#1a1a1a;font-size:14px;display:flex;align-items:center;gap:8px;cursor:pointer;transition:border-color .15s,background-color .15s;} .ds-filter b{font-weight:600;} .ds-filter svg{color:#4a4a4a;} .ds-filter-k{color:#6b6b6b;} .ds-filter:hover{border-color:#1a1a1a;} .ds-filter:focus-visible{outline:2px solid #1a1a1a;outline-offset:2px;} .ds-filter-on{background:#fff4e0;border-color:#fa9e0d;}"
+    },
+    {
+      "name": "Primary Button",
+      "kind": "button",
+      "refersTo": "button-primary",
+      "description": "Ink pill for the one recovery action (Try again).",
+      "html": "<button class=\"ds-btn\">Try again</button>",
+      "css": ".ds-btn{font-family:'Source Sans 3',system-ui,-apple-system,'Segoe UI',sans-serif;height:40px;padding:0 20px;border:0;border-radius:9999px;background:#1a1a1a;color:#fff;font-size:15px;font-weight:600;cursor:pointer;transition:background-color .15s;} .ds-btn:hover{background:#4a4a4a;} .ds-btn:focus-visible{outline:2px solid #1a1a1a;outline-offset:2px;}"
+    },
+    {
+      "name": "Property Chip",
+      "kind": "chip",
+      "refersTo": "property-chip",
+      "description": "Station-code chip in the property type's line colour.",
+      "html": "<span class=\"ds-chip\" style=\"background:#007a3d\">HDB</span> <span class=\"ds-chip\" style=\"background:#d42e12\">CONDO</span> <span class=\"ds-chip\" style=\"background:#9d5b25\">LANDED</span> <span class=\"ds-chip\" style=\"background:#9900aa\">EC</span> <span class=\"ds-chip\" style=\"background:#005ec4\">STRATA</span>",
+      "css": ".ds-chip{font-family:'Source Sans 3',system-ui,-apple-system,'Segoe UI',sans-serif;display:inline-flex;align-items:center;height:20px;padding:0 8px;border-radius:9999px;color:#fff;font-size:11px;font-weight:700;letter-spacing:0.025em;white-space:nowrap;}"
+    },
+    {
+      "name": "Town Line",
+      "kind": "custom",
+      "refersTo": "town-line",
+      "description": "Signature: an agent's top towns as stops on a 10px line in their dominant type colour; town stops ring HDB green, district stops ring the main private-type colour.",
+      "html": "<ol class=\"ds-line\"><span class=\"ds-line-stroke\"></span><li><i class=\"ds-stop\"></i><b>Tampines</b><span>246 <em>7.6%</em></span></li><li><i class=\"ds-stop\"></i><b>Sengkang</b><span>243 <em>7.5%</em></span></li><li><i class=\"ds-stop ds-stop-d\"></i><b>D19 · Serangoon Garden</b><span>204 <em>6.3%</em></span></li><li><i class=\"ds-stop\"></i><b>Yishun</b><span>192 <em>5.9%</em></span></li></ol>",
+      "css": ".ds-line{font-family:'Source Sans 3',system-ui,-apple-system,'Segoe UI',sans-serif;position:relative;list-style:none;margin:0;padding:0;display:grid;gap:20px;font-size:15px;color:#1a1a1a;} .ds-line-stroke{position:absolute;left:10px;top:4px;bottom:4px;width:10px;border-radius:9999px;background:#007a3d;} .ds-line li{position:relative;display:flex;align-items:center;gap:16px;} .ds-line b{flex:1;font-weight:600;} .ds-line span{font-variant-numeric:tabular-nums;font-size:14px;} .ds-line em{font-style:normal;color:#6b6b6b;display:inline-block;width:48px;text-align:right;margin-left:8px;} .ds-stop{position:relative;z-index:1;width:30px;height:18px;box-sizing:border-box;border-radius:9999px;background:#fff;border:3px solid #007a3d;flex-shrink:0;} .ds-stop-d{border-color:#d42e12;}"
+    },
+    {
+      "name": "Bar List with Market",
+      "kind": "custom",
+      "refersTo": "bar-list",
+      "description": "Share bars on a wash track; a thin market-grey bar compares against the whole market.",
+      "html": "<ul class=\"ds-bars\"><li><div class=\"ds-bar-h\"><span>HDB</span><span><b>99.4%</b> <em>1,394</em></span></div><div class=\"ds-track\"><div style=\"width:99.4%;background:#007a3d\"></div></div><div class=\"ds-mkt\"><div class=\"ds-track ds-thin\"><div style=\"width:43%\"></div></div><small>market 43%</small></div></li><li><div class=\"ds-bar-h\"><span>Resale</span><span><b>36.5%</b> <em>526,370</em></span></div><div class=\"ds-track\"><div style=\"width:36.5%;background:#1a1a1a\"></div></div></li></ul>",
+      "css": ".ds-bars{font-family:'Source Sans 3',system-ui,-apple-system,'Segoe UI',sans-serif;list-style:none;margin:0;padding:0;display:grid;gap:12px;font-size:14px;color:#1a1a1a;} .ds-bar-h{display:flex;justify-content:space-between;font-variant-numeric:tabular-nums;} .ds-bar-h b{font-weight:600;} .ds-bar-h em{font-style:normal;color:#6b6b6b;margin-left:8px;} .ds-track{margin-top:6px;height:8px;background:#f5f5f3;} .ds-track>div{height:100%;} .ds-mkt{display:flex;align-items:center;gap:8px;margin-top:4px;} .ds-thin{flex:1;height:4px;margin:0;} .ds-thin>div{background:#b5b5b0;} .ds-mkt small{font-size:11px;color:#6b6b6b;width:64px;text-align:right;font-variant-numeric:tabular-nums;}"
+    },
+    {
+      "name": "Ranked Table Row",
+      "kind": "custom",
+      "refersTo": "table-row-selected",
+      "description": "Hairline-ruled ranking row; selected row in signal wash, count on a shared ink scale.",
+      "html": "<table class=\"ds-table\"><thead><tr><th>#</th><th>Salesperson</th><th class=\"r\">Transactions</th></tr></thead><tbody><tr class=\"on\"><td class=\"m\">1</td><td><b>Kuah Kai Pin, Kavin</b><small>R043039D</small></td><td class=\"r\"><b>3,246</b><div class=\"ds-scale\"><div style=\"width:100%\"></div></div></td></tr><tr><td class=\"m\">2</td><td><b>Yeo Lee Kiow</b><small>R009549H</small></td><td class=\"r\"><b>2,100</b><div class=\"ds-scale\"><div style=\"width:65%\"></div></div></td></tr></tbody></table>",
+      "css": ".ds-table{font-family:'Source Sans 3',system-ui,-apple-system,'Segoe UI',sans-serif;width:100%;border-collapse:collapse;border-top:2px solid #1a1a1a;color:#1a1a1a;font-size:15px;} .ds-table th{text-align:left;font-size:12px;font-weight:600;color:#6b6b6b;padding:8px;border-bottom:1px solid #e3e3e0;} .ds-table th.r{text-align:right;} .ds-table td{padding:12px 8px;border-bottom:1px solid #e3e3e0;vertical-align:top;} .ds-table tbody tr{cursor:pointer;transition:background-color .15s;} .ds-table tbody tr:hover{background:#f5f5f3;} .ds-table tr.on{background:#fff4e0;} .ds-table td.r{text-align:right;width:160px;font-variant-numeric:tabular-nums;} .ds-table .m{color:#6b6b6b;font-size:14px;width:24px;font-variant-numeric:tabular-nums;} .ds-table b{font-weight:600;} .ds-table .r b{font-weight:700;} .ds-table small{display:block;font-size:12px;color:#6b6b6b;margin-top:2px;} .ds-scale{margin-top:6px;height:6px;background:#f5f5f3;} .ds-scale>div{height:100%;background:#1a1a1a;}"
+    },
+    {
+      "name": "Figure Strip",
+      "kind": "card",
+      "refersTo": "figure-strip",
+      "description": "Ruled definition list of headline figures; no card, no shadow.",
+      "html": "<dl class=\"ds-figs\"><div><dt>Recorded transactions</dt><dd>1,440,223</dd></div><div><dt>Per month, on average</dt><dd>12,103</dd></div><div><dt>Last 12 months vs the 12 before</dt><dd>−5.9%</dd></div></dl>",
+      "css": ".ds-figs{font-family:'Source Sans 3',system-ui,-apple-system,'Segoe UI',sans-serif;display:grid;grid-template-columns:repeat(3,1fr);margin:0;border-top:1px solid #1a1a1a;border-bottom:1px solid #1a1a1a;color:#1a1a1a;} .ds-figs div{padding:16px 24px 16px 0;border-right:1px solid #e3e3e0;} .ds-figs div+div{padding-left:16px;} .ds-figs div:last-child{border-right:0;} .ds-figs dt{font-size:14px;color:#6b6b6b;} .ds-figs dd{margin:2px 0 0;font-size:28px;line-height:1.25;font-weight:700;font-variant-numeric:tabular-nums;}"
+    }
+  ],
+  "narrative": {
+    "northStar": "The Line Map",
+    "overview": "A salesperson's record is read the way a commuter reads the MRT network: a near-black wayfinding band across the top, a white ground, and every agent's working towns drawn as stops on their own line. Property types wear line-badge colours, rounded station-code chips that tell HDB from condo at a glance. The world is LTA system map and platform signage, not an analytics template: no KPI cards, no pies, no dataset sidebar.\n\nDensity is that of a timetable. Lists are ruled, numbers are tabular and right-aligned, and the eye moves down a column the way it moves down a line. Structure comes from rules, not boxes: a 2px ink rule opens each region, 1px hairlines separate rows, and nothing floats on a shadow except things that genuinely float (a dropdown, a tooltip). Colour is spent on two jobs only: line colours identify property types, and signal orange marks what is live or selected.\n\nThe voice is signage. Labels carry the meaning; the interface does not explain itself in captions, footnotes or taglines.",
+    "keyCharacteristics": [
+      "Near-black header band, white ground, flat ruled regions.",
+      "Five line colours, one per property type, used for chips, bars and the town line.",
+      "Signal orange as the single live/selection accent.",
+      "Source Sans 3 throughout, tabular numerals everywhere a number appears.",
+      "Pills for controls and chips; square corners for everything structural.",
+      "The town line: a 10px stroke with white lozenge stops."
+    ],
+    "rules": [
+      {
+        "name": "The One Signal Rule",
+        "body": "Orange means live or selected and nothing else. It never fills a bar, never colours a series, never decorates.",
+        "section": "colors"
+      },
+      {
+        "name": "The Line Badge Rule",
+        "body": "A line colour always means its property type. Neutral breakdowns (deal type, acting for) are drawn in Signage Ink, never borrowed line colours.",
+        "section": "colors"
+      },
+      {
+        "name": "The Grey Is Provisional Rule",
+        "body": "Within a data series, Stone marks the trailing months still being reported. Grey bars are not a style choice and never mean \"less important\".",
+        "section": "colors"
+      },
+      {
+        "name": "The Not A Real Line Rule",
+        "body": "Lines borrow the map's grammar but never its identity: no line names, no line codes such as \"EW\" or \"NS\".",
+        "section": "colors"
+      },
+      {
+        "name": "The Tabular Rule",
+        "body": "Every number on screen uses tabular numerals so columns of counts and percentages align like a timetable.",
+        "section": "typography"
+      },
+      {
+        "name": "The Labels Carry It Rule",
+        "body": "No explanatory caption lines, footnotes or taglines under charts and lists. If a reader needs to know what a mark means, the label, the column head or the tooltip says it.",
+        "section": "typography"
+      },
+      {
+        "name": "The Ruled Not Raised Rule",
+        "body": "Containers, cards, figures and panels have no shadow. A region begins with a 2px ink rule or a 1px ink border pair; rows separate with 1px hairlines.",
+        "section": "elevation"
+      }
+    ],
+    "dos": [
+      "**Do** open every region with a 2px ink rule or a pair of 1px ink rules, and divide rows with 1px hairlines.",
+      "**Do** colour property types only with their line colour, everywhere they appear.",
+      "**Do** render the trailing provisional months in Stone and say \"Provisional\" in the tooltip.",
+      "**Do** set every number in tabular numerals, right-aligned in columns.",
+      "**Do** use pills for controls and chips, square corners for structure.",
+      "**Do** keep transitions to colour and opacity at 150 to 200ms; dim a region to 60% opacity while it updates.",
+      "**Do** let labels carry meaning: name sections and columns precisely instead of adding a caption."
+    ],
+    "donts": [
+      "**Don't** add explanatory captions, footnotes or taglines (\"Grey bars: …\", \"ranked by …\").",
+      "**Don't** put shadows on cards, panels or figures; only popovers and tooltips float.",
+      "**Don't** use signal orange as a data colour or decoration.",
+      "**Don't** give lines real MRT names or codes such as \"EW\" or \"NS\".",
+      "**Don't** fall back to KPI cards, pie charts or a dataset sidebar.",
+      "**Don't** use a line colour for a neutral breakdown such as deal type or acting for."
+    ]
+  }
+}
