@@ -1,7 +1,8 @@
-import React, { useState } from 'react';
+import { lazy, Suspense, useState } from 'react';
 import { format } from 'date-fns';
 import AnalyticsDashboard from './analytics/AnalyticsDashboard';
-import AgentInsights from './agents/AgentInsights';
+
+const AgentInsights = lazy(() => import('./agents/AgentInsights'));
 
 export default function DatasetView({ dataset }) {
   const [activeTab, setActiveTab] = useState('analytics'); // Default to analytics
@@ -66,7 +67,9 @@ export default function DatasetView({ dataset }) {
       )}
 
       {activeTab === 'agents' && (
-        <AgentInsights datasetId={dataset.id} />
+        <Suspense fallback={<div className="flex items-center justify-center h-96 text-gray-500">Loading agent insights...</div>}>
+          <AgentInsights datasetId={dataset.id} />
+        </Suspense>
       )}
     </div>
   );

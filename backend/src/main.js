@@ -2,7 +2,7 @@ import { writeFileSync, mkdirSync, existsSync, createReadStream } from 'fs';
 import { join, dirname } from 'path';
 import { fileURLToPath } from 'url';
 import { config as dotenvConfig } from 'dotenv';
-import Database from 'better-sqlite3';
+import { DatabaseSync } from 'node:sqlite';
 import { parse } from 'csv-parse';
 import { getS3UrlFromDataGovSG, downloadCSVFromS3 } from './fetchers/data-gov-fetcher.js';
 import { parseTransactionDate } from './utils/dateParser.js';
@@ -36,11 +36,13 @@ async function streamCSVIntoSQLite(config) {
 
   const dbPath = join(outputDir, 'cea-transactions.db');
   logger.log(`Streaming CSV into database at: ${dbPath}`);
-  const db = new Database(dbPath);
-  db.pragma('journal_mode = WAL');
+  const db = new DatabaseSync(dbPath);
+  db.exec('PRAGMA journal_mode = WAL');
 
   db.exec(`
     DROP TABLE IF EXISTS transactions;
+    DROP TABLE IF EXISTS dashboard_counts;
+    DROP TABLE IF EXISTS agent_counts;
 
     CREATE TABLE transactions (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -65,7 +67,18 @@ async function streamCSVIntoSQLite(config) {
     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `);
 
-  const insertBatch = db.transaction((records) => {
+  const insertBatch = (records) => {
+    db.exec('BEGIN');
+    try {
+      insertRecords(records);
+      db.exec('COMMIT');
+    } catch (error) {
+      db.exec('ROLLBACK');
+      throw error;
+    }
+  };
+
+  const insertRecords = (records) => {
     for (const record of records) {
       // Precompute the "YYYY-MM" grouping key at load time so /timeseries can
       // GROUP BY an indexed column instead of a per-row CASE/substr expression.
@@ -85,7 +98,7 @@ async function streamCSVIntoSQLite(config) {
         periodMonth
       );
     }
-  });
+  };
 
   const schemaSample = [];
   let rowCount = 0;
@@ -152,6 +165,24 @@ async function streamCSVIntoSQLite(config) {
     CREATE INDEX idx_period_month ON transactions(period_month);
   `);
 
+  logger.log('Building aggregate tables...');
+  db.exec(`
+    CREATE TABLE dashboard_counts AS
+    SELECT property_type, transaction_type, represented, transaction_date, period_month, COUNT(*) AS row_count
+    FROM transactions
+    GROUP BY property_type, transaction_type, represented, transaction_date, period_month;
+
+    CREATE TABLE agent_counts AS
+    SELECT salesperson_reg_num, salesperson_name, property_type, transaction_type, represented, COUNT(*) AS row_count
+    FROM transactions
+    GROUP BY salesperson_reg_num, salesperson_name, property_type, transaction_type, represented;
+
+    CREATE INDEX idx_agent_counts_reg_name ON agent_counts(salesperson_reg_num, salesperson_name);
+  `);
+
+  logger.log('Collecting query planner statistics...');
+  db.exec('ANALYZE');
+
   // Analyze schema and generate viz recommendations from a sample, not the full dataset
   logger.log(`Analyzing schema from a ${schemaSample.length}-row sample...`);
   const schema = analyzeSchema(schemaSample);
@@ -193,8 +224,8 @@ async function streamCSVIntoSQLite(config) {
 
   // Checkpoint WAL into the main db file and drop back to a single-file journal
   // mode so the runtime's read-only connection isn't left with stray WAL/SHM state
-  db.pragma('wal_checkpoint(TRUNCATE)');
-  db.pragma('journal_mode = DELETE');
+  db.exec('PRAGMA wal_checkpoint(TRUNCATE)');
+  db.exec('PRAGMA journal_mode = DELETE');
 
   db.close();
 
