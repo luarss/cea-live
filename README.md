@@ -1,58 +1,26 @@
-# Singapore Property Transaction Dashboard
+# CEA-VIZ
 
-An interactive website that helps you explore and understand property sales data in Singapore. View over 1.2 million property transactions in charts and graphs, making it easy to spot trends and patterns in the real estate market.
+Look up any registered Singapore property salesperson and see what the regulator recorded: every residential transaction they handled since January 2017, by property type, deal type, side of the deal, town and month, set against the whole market.
 
-**[View Live Dashboard →](https://cea-viz.onrender.com/)**
+**[cea-viz.onrender.com](https://cea-viz.onrender.com/)**
 
-## What This Does
+## Data
 
-This dashboard makes Singapore's property transaction data easy to understand and explore. Instead of looking through endless spreadsheets, you can:
+The Council for Estate Agencies' [Salespersons' Property Transaction Records (residential)](https://data.gov.sg) on data.gov.sg, about 1.44 million records. Each record has the salesperson, month, property type, transaction type, party represented, and town or district. There are no prices, addresses or ratings. The latest one to two months are incomplete because of reporting lag.
 
-- **Explore 1.2 Million Transactions** - Browse property sales records collected by Singapore's Council for Estate Agencies
-- **See Trends Visually** - View data as interactive charts and graphs that help you understand the market
-- **Filter and Search** - Find specific types of properties, locations, or time periods you're interested in
-- **Works Everywhere** - Use it on your computer, tablet, or phone
-- **Always Free** - No cost to use or set up
+## Running locally
 
-## Who Is This For?
+Requires Node 24 (`.nvmrc`).
 
-This dashboard is useful for anyone interested in Singapore property data:
+```sh
+make install      # install backend and frontend dependencies
+make fetch-data   # download the latest CSV into data/
+make build        # build the SQLite database and the frontend
+make start        # serve app and API on http://localhost:3003
+```
 
-- Property buyers researching market trends
-- Real estate enthusiasts tracking prices and transactions
-- Researchers analyzing housing market patterns
-- Students learning about data visualization
-- Anyone curious about Singapore's property market
-
-## What Information Can You See?
-
-The dashboard shows official transaction records including:
-
-- Property addresses and types
-- Sale prices and dates
-- Transaction details
-- Market trends over time
-- Breakdowns by property type and location
-
-All data comes directly from Singapore's official government data portal and is updated regularly.
-
-## How to Use It
-
-Simply visit the website and start exploring. The dashboard is designed to be intuitive - click on charts to drill down into details, use filters to narrow your search, and browse through the data at your own pace.
-
-## About the Data
-
-The information displayed comes from Singapore's Open Data Portal (data.gov.sg), which publishes official property transaction records collected by the Council for Estate Agencies (CEA). This includes:
-
-- Over 1.2 million residential property transactions
-- Records dating back to January 2017
-- Monthly updates with the latest transactions
-- Official, verified information from licensed salespersons
-
-## Questions or Feedback?
-
-If you have questions about the data, find any issues, or have suggestions for improvements, feel free to reach out through the project page.
+For frontend work, run `make dev` alongside `make start`: Vite serves on port 3000 and calls the API on 3003. Copy `.env.example` to `.env` to set a data.gov.sg API key or CORS origin.
 
 ## License
 
-See [LICENSE](LICENSE) file for details.
+[LICENSE](LICENSE)
