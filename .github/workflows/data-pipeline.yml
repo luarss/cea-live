@@ -74,3 +74,9 @@ jobs:
           gh release list --limit 100 --json tagName,createdAt \
             --jq "[.[] | select(.tagName | startswith(\"data-\"))] | sort_by(.createdAt) | reverse | .[$RELEASES_TO_KEEP:] | .[].tagName" \
             | xargs -r -n1 gh release delete --yes --cleanup-tag
+
+      - name: Redeploy Render
+        if: steps.diff.outputs.changed == 'true'
+        env:
+          RENDER_DEPLOY_HOOK: ${{ secrets.RENDER_DEPLOY_HOOK }}
+        run: curl -fsS -X POST "$RENDER_DEPLOY_HOOK" > /dev/null
