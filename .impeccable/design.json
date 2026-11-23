@@ -1,6 +1,6 @@
 {
   "schemaVersion": 2,
-  "generatedAt": "2026-11-23T02:20:05+00:00",
+  "generatedAt": "2026-11-23T07:58:10+00:00",
   "title": "Design System: CEA-VIZ",
   "extensions": {
     "colorMeta": {
@@ -358,12 +358,12 @@
       "css": ".ds-chip{font-family:'Source Sans 3',system-ui,-apple-system,'Segoe UI',sans-serif;display:inline-flex;align-items:center;height:20px;padding:0 8px;border-radius:9999px;color:#fff;font-size:11px;font-weight:700;letter-spacing:0.025em;white-space:nowrap;}"
     },
     {
-      "name": "Town Line",
+      "name": "Town Map",
       "kind": "custom",
-      "refersTo": "town-line",
-      "description": "Signature: an agent's top towns as stops on a 10px line in their dominant type colour; town stops ring HDB green, district stops ring the main private-type colour.",
-      "html": "<ol class=\"ds-line\"><span class=\"ds-line-stroke\"></span><li><i class=\"ds-stop\"></i><b>Tampines</b><span>246 <em>7.6%</em></span></li><li><i class=\"ds-stop\"></i><b>Sengkang</b><span>243 <em>7.5%</em></span></li><li><i class=\"ds-stop ds-stop-d\"></i><b>D19 · Serangoon Garden</b><span>204 <em>6.3%</em></span></li><li><i class=\"ds-stop\"></i><b>Yishun</b><span>192 <em>5.9%</em></span></li></ol>",
-      "css": ".ds-line{font-family:'Source Sans 3',system-ui,-apple-system,'Segoe UI',sans-serif;position:relative;list-style:none;margin:0;padding:0;display:grid;gap:20px;font-size:15px;color:#1a1a1a;} .ds-line-stroke{position:absolute;left:10px;top:4px;bottom:4px;width:10px;border-radius:9999px;background:#007a3d;} .ds-line li{position:relative;display:flex;align-items:center;gap:16px;} .ds-line b{flex:1;font-weight:600;} .ds-line span{font-variant-numeric:tabular-nums;font-size:14px;} .ds-line em{font-style:normal;color:#6b6b6b;display:inline-block;width:48px;text-align:right;margin-left:8px;} .ds-stop{position:relative;z-index:1;width:30px;height:18px;box-sizing:border-box;border-radius:9999px;background:#fff;border:3px solid #007a3d;flex-shrink:0;} .ds-stop-d{border-color:#d42e12;}"
+      "refersTo": "town-map",
+      "description": "Signature: an agent's top towns as numbered station markers on a schematic Singapore, sized by count; town markers ring HDB green, district markers ring the main private-type colour; the ranked list repeats each numbered marker.",
+      "html": "<div class=\"ds-map\"><svg viewBox=\"0 0 450 250\" role=\"img\" aria-label=\"Map of Singapore\"><path d=\"M15,156 L45,130 L70,108 L85,83 L95,58 L110,38 L135,30 L160,32 L175,21 L195,16 L215,10 L235,8 L255,23 L270,48 L285,60 L310,56 L330,73 L355,88 L380,86 L405,83 L435,103 L440,128 L415,156 L385,168 L355,173 L325,180 L300,185 L280,194 L270,210 L250,216 L230,208 L205,203 L185,192 L160,186 L135,180 L105,173 L75,178 L50,190 L25,188 L12,173 Z\" class=\"ds-island\"/><g class=\"ds-marker\" transform=\"translate(350,124)\"><circle r=\"15.5\"/><text>1</text></g><g class=\"ds-marker\" transform=\"translate(300,86)\"><circle r=\"15\"/><text>2</text></g><g class=\"ds-marker ds-marker-d\" transform=\"translate(296,124)\"><circle r=\"13\"/><text>3</text></g><g class=\"ds-marker\" transform=\"translate(242,49)\"><circle r=\"12\"/><text>4</text></g></svg><ol class=\"ds-map-list\"><li><i class=\"ds-badge\">1</i><b>Tampines</b><span>246 <em>7.6%</em></span></li><li><i class=\"ds-badge\">2</i><b>Sengkang</b><span>243 <em>7.5%</em></span></li><li><i class=\"ds-badge ds-badge-d\">3</i><b>D19 · Serangoon Garden</b><span>204 <em>6.3%</em></span></li><li><i class=\"ds-badge\">4</i><b>Yishun</b><span>192 <em>5.9%</em></span></li></ol></div>",
+      "css": ".ds-map{font-family:'Source Sans 3',system-ui,-apple-system,'Segoe UI',sans-serif;color:#1a1a1a;} .ds-map svg{display:block;width:100%;height:auto;} .ds-island{fill:#f5f5f3;stroke:#e3e3e0;stroke-width:1;stroke-linejoin:round;} .ds-marker circle{fill:#fff;stroke:#007a3d;stroke-width:3;transition:fill .15s;} .ds-marker-d circle{stroke:#d42e12;} .ds-marker text{font-size:11px;font-weight:700;text-anchor:middle;dominant-baseline:central;fill:#1a1a1a;font-variant-numeric:tabular-nums;} .ds-marker:hover circle{fill:#007a3d;} .ds-marker-d:hover circle{fill:#d42e12;} .ds-marker:hover text{fill:#fff;} .ds-map-list{list-style:none;margin:16px 0 0;padding:0;font-size:15px;} .ds-map-list li{display:flex;align-items:center;gap:12px;padding:6px 0;transition:background-color .15s;} .ds-map-list li:hover{background:#f5f5f3;} .ds-badge{width:24px;height:24px;box-sizing:border-box;border-radius:9999px;border:3px solid #007a3d;display:grid;place-items:center;font-style:normal;font-size:11px;font-weight:700;font-variant-numeric:tabular-nums;flex-shrink:0;} .ds-badge-d{border-color:#d42e12;} .ds-map-list b{flex:1;font-weight:600;} .ds-map-list span{font-size:14px;font-variant-numeric:tabular-nums;} .ds-map-list em{font-style:normal;color:#6b6b6b;display:inline-block;width:48px;text-align:right;margin-left:8px;}"
     },
     {
       "name": "Bar List with Market",
@@ -392,14 +392,14 @@
   ],
   "narrative": {
     "northStar": "The Line Map",
-    "overview": "A salesperson's record is read the way a commuter reads the MRT network: a near-black wayfinding band across the top, a white ground, and every agent's working towns drawn as stops on their own line. Property types wear line-badge colours, rounded station-code chips that tell HDB from condo at a glance. The world is LTA system map and platform signage, not an analytics template: no KPI cards, no pies, no dataset sidebar.\n\nDensity is that of a timetable. Lists are ruled, numbers are tabular and right-aligned, and the eye moves down a column the way it moves down a line. Structure comes from rules, not boxes: a 2px ink rule opens each region, 1px hairlines separate rows, and nothing floats on a shadow except things that genuinely float (a dropdown, a tooltip). Colour is spent on two jobs only: line colours identify property types, and signal orange marks what is live or selected.\n\nThe voice is signage. Labels carry the meaning; the interface does not explain itself in captions, footnotes or taglines.",
+    "overview": "**Creative North Star: \"The Line Map\"**\n\nA salesperson's record is read the way a commuter reads the MRT network: a near-black wayfinding band across the top, a white ground, and every agent's working towns marked as numbered stations on a schematic island. Property types wear line-badge colours, rounded station-code chips that tell HDB from condo at a glance. The world is LTA system map and platform signage, not an analytics template: no KPI cards, no pies, no dataset sidebar.\n\nDensity is that of a timetable. Lists are ruled, numbers are tabular and right-aligned, and the eye moves down a column the way it moves down a line. Structure comes from rules, not boxes: a 2px ink rule opens each region, 1px hairlines separate rows, and nothing floats on a shadow except things that genuinely float (a dropdown, a tooltip). Colour is spent on two jobs only: line colours identify property types, and signal orange marks what is live or selected.\n\nThe voice is signage. Labels carry the meaning; the interface does not explain itself in captions, footnotes or taglines.",
     "keyCharacteristics": [
       "Near-black header band, white ground, flat ruled regions.",
-      "Five line colours, one per property type, used for chips, bars and the town line.",
+      "Five line colours, one per property type, used for chips, bars and town markers.",
       "Signal orange as the single live/selection accent.",
       "Source Sans 3 throughout, tabular numerals everywhere a number appears.",
       "Pills for controls and chips; square corners for everything structural.",
-      "The town line: a 10px stroke with white lozenge stops."
+      "The town map: numbered white station markers ringed in line colour on a schematic island."
     ],
     "rules": [
       {

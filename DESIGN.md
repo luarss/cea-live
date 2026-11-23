@@ -135,7 +135,7 @@ components:
 
 **Creative North Star: "The Line Map"**
 
-A salesperson's record is read the way a commuter reads the MRT network: a near-black wayfinding band across the top, a white ground, and every agent's working towns drawn as stops on their own line. Property types wear line-badge colours, rounded station-code chips that tell HDB from condo at a glance. The world is LTA system map and platform signage, not an analytics template: no KPI cards, no pies, no dataset sidebar.
+A salesperson's record is read the way a commuter reads the MRT network: a near-black wayfinding band across the top, a white ground, and every agent's working towns marked as numbered stations on a schematic island. Property types wear line-badge colours, rounded station-code chips that tell HDB from condo at a glance. The world is LTA system map and platform signage, not an analytics template: no KPI cards, no pies, no dataset sidebar.
 
 Density is that of a timetable. Lists are ruled, numbers are tabular and right-aligned, and the eye moves down a column the way it moves down a line. Structure comes from rules, not boxes: a 2px ink rule opens each region, 1px hairlines separate rows, and nothing floats on a shadow except things that genuinely float (a dropdown, a tooltip). Colour is spent on two jobs only: line colours identify property types, and signal orange marks what is live or selected.
 
