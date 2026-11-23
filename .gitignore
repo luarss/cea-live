@@ -10,6 +10,7 @@ bin/
 # Data
 data/raw/
 data/processed/
+data/*.csv
 *.log
 logs/
 

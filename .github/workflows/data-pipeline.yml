@@ -13,6 +13,10 @@ on:
 permissions:
   contents: write
 
+env:
+  DATA_FILE: CEASalespersonsPropertyTransactionRecordsresidential.csv
+  RELEASES_TO_KEEP: 3
+
 jobs:
   fetch-and-process:
     runs-on: ubuntu-latest
@@ -20,12 +24,6 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
-        with:
-          token: ${{ secrets.GITHUB_TOKEN }}
-          lfs: true
-
-      - name: Setup Git LFS
-        run: git lfs install
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
@@ -43,11 +41,36 @@ jobs:
           NODE_ENV: production
           DATA_GOV_API_KEY: ${{ secrets.DATA_GOV_API_KEY }}
 
-      - name: Commit raw data changes
-        uses: stefanzweifel/git-auto-commit-action@v5
-        with:
-          commit_message: "🤖 Update raw data"
-          file_pattern: 'data/*.csv'
-          commit_user_name: github-actions[bot]
-          commit_user_email: github-actions[bot]@users.noreply.github.com
-          commit_author: github-actions[bot] <github-actions[bot]@users.noreply.github.com>
+      - name: Check whether data changed
+        id: diff
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          new_sha=$(sha256sum "data/$DATA_FILE" | cut -d' ' -f1)
+          latest_sha=$(gh release view --json assets --jq ".assets[] | select(.name==\"$DATA_FILE\") | .digest" 2>/dev/null | sed 's/^sha256://')
+          echo "new=$new_sha latest=$latest_sha"
+          if [ "$new_sha" = "$latest_sha" ]; then
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Publish data release
+        if: steps.diff.outputs.changed == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          tag="data-$(date -u +%Y-%m-%d-%H%M)"
+          gh release create "$tag" "data/$DATA_FILE" \
+            --title "Data $(date -u +%Y-%m-%d)" \
+            --notes "CEA residential transaction records snapshot" \
+            --latest
+
+      - name: Prune old data releases
+        if: steps.diff.outputs.changed == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release list --limit 100 --json tagName,createdAt \
+            --jq "[.[] | select(.tagName | startswith(\"data-\"))] | sort_by(.createdAt) | reverse | .[$RELEASES_TO_KEEP:] | .[].tagName" \
+            | xargs -r -n1 gh release delete --yes --cleanup-tag

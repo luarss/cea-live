@@ -4,7 +4,7 @@ services:
     env: node
     region: singapore
     plan: free
-    buildCommand: make install-lfs && make build
+    buildCommand: make fetch-data && make build
     startCommand: make start
     envVars:
       - key: NODE_ENV
