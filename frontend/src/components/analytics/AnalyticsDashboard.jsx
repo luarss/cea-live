@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { useMarketInsights, useMultiDimensionalAnalytics, useTimeSeriesData } from '../../hooks/useAnalytics';
+import { useMarketInsights, useTimeSeriesData } from '../../hooks/useAnalytics';
 import PieChart from '../visualizations/PieChart';
 import BarChart from '../visualizations/BarChart';
 import LineChart from '../visualizations/LineChart';
@@ -9,9 +9,6 @@ export default function AnalyticsDashboard({ datasetId }) {
   const [filters, setFilters] = useState({});
 
   const { data: insights, loading: insightsLoading } = useMarketInsights(datasetId, filters);
-  const { data: transactionTypeData } = useMultiDimensionalAnalytics(datasetId, 'transaction_type', null, filters);
-  const { data: representedData } = useMultiDimensionalAnalytics(datasetId, 'represented', null, filters);
-  const { data: propertyTypeData } = useMultiDimensionalAnalytics(datasetId, 'property_type', null, filters);
   const { data: timeSeriesData } = useTimeSeriesData(datasetId, 'month', null, filters);
 
   if (insightsLoading) {
@@ -30,13 +27,9 @@ export default function AnalyticsDashboard({ datasetId }) {
     );
   }
 
-  // Use chart-ready data from backend
-  const transactionTypeChartData = transactionTypeData?.chartData || [];
-  const representedChartData = representedData?.chartData || [];
-  const propertyTypeChartData = propertyTypeData?.data?.slice(0, 5).map(item => ({
-    name: item[propertyTypeData.dimensions[0]],
-    count: item.count
-  })) || [];
+  const transactionTypeChartData = insights.distributions.transactionTypes;
+  const representedChartData = insights.distributions.represented;
+  const propertyTypeChartData = insights.distributions.propertyTypes.slice(0, 5);
   const timeSeriesChartData = timeSeriesData?.chartData || [];
 
   return (
@@ -75,7 +68,7 @@ export default function AnalyticsDashboard({ datasetId }) {
           <div className="card">
             <PieChart
               data={transactionTypeChartData}
-              dataKey="value"
+              dataKey="count"
               nameKey="name"
               title="Transaction Types"
             />
@@ -83,7 +76,7 @@ export default function AnalyticsDashboard({ datasetId }) {
           <div className="card">
             <PieChart
               data={representedChartData}
-              dataKey="value"
+              dataKey="count"
               nameKey="name"
               title="Buyer vs Seller Representation"
             />

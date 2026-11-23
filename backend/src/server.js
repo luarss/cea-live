@@ -47,6 +47,33 @@ const corsOptions = {
 app.use(cors(corsOptions));
 app.use(express.json());
 
+const MAX_CACHED_RESPONSES = 500;
+const responseCache = new Map();
+export const PRECOMPUTED_RESPONSES_PATH = join(ROOT_DIR, 'data', 'processed', 'precomputed-responses.json');
+
+app.use('/api', (req, res, next) => {
+  if (req.method !== 'GET') {
+    return next();
+  }
+
+  const cacheKey = req.originalUrl;
+  if (responseCache.has(cacheKey)) {
+    return res.json(responseCache.get(cacheKey));
+  }
+
+  const sendJson = res.json.bind(res);
+  res.json = (body) => {
+    if (res.statusCode === 200) {
+      if (responseCache.size >= MAX_CACHED_RESPONSES) {
+        responseCache.delete(responseCache.keys().next().value);
+      }
+      responseCache.set(cacheKey, body);
+    }
+    return sendJson(body);
+  };
+  next();
+});
+
 // Helper functions for filter parsing and application
 /**
  * Parse filters from query string
@@ -116,7 +143,15 @@ function buildFilterConditions(parsedFilters) {
 const frontendDistPath = join(ROOT_DIR, 'frontend', 'dist');
 if (existsSync(frontendDistPath)) {
   console.log('Serving frontend from:', frontendDistPath);
-  app.use(express.static(frontendDistPath, { index: 'index.html' }));
+  const hashedAssetsPath = join(frontendDistPath, 'assets');
+  app.use(express.static(frontendDistPath, {
+    index: 'index.html',
+    setHeaders: (res, filePath) => {
+      if (filePath.startsWith(hashedAssetsPath)) {
+        res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
+      }
+    }
+  }));
 }
 
 // SQLite helper functions
@@ -608,22 +643,12 @@ app.get('/api/datasets/:id/insights', (req, res) => {
     const represented = db.prepare(representedQuery).all(...params);
 
     // Monthly trends
-    const monthConversion = `
-      CASE substr(transaction_date, 1, 3)
-        WHEN 'JAN' THEN '01' WHEN 'FEB' THEN '02' WHEN 'MAR' THEN '03'
-        WHEN 'APR' THEN '04' WHEN 'MAY' THEN '05' WHEN 'JUN' THEN '06'
-        WHEN 'JUL' THEN '07' WHEN 'AUG' THEN '08' WHEN 'SEP' THEN '09'
-        WHEN 'OCT' THEN '10' WHEN 'NOV' THEN '11' WHEN 'DEC' THEN '12'
-      END
-    `;
     const monthlyQuery = `
-      SELECT
-        substr(transaction_date, -4) || '-' || ${monthConversion} as period,
-        COUNT(*) as count
+      SELECT period_month as period, COUNT(*) as count
       FROM transactions
-      ${whereClause}${whereClause ? ' AND' : ' WHERE'} transaction_date IS NOT NULL AND transaction_date != '-'
-      GROUP BY period
-      ORDER BY period
+      ${whereClause}${whereClause ? ' AND' : ' WHERE'} period_month IS NOT NULL
+      GROUP BY period_month
+      ORDER BY period_month
     `;
     const monthlyData = db.prepare(monthlyQuery).all(...params);
     const monthlyAverage = monthlyData.length > 0
@@ -631,16 +656,12 @@ app.get('/api/datasets/:id/insights', (req, res) => {
       : 0;
 
     // Yearly growth
-    const yearlyQuery = `
-      SELECT
-        substr(transaction_date, -4) as year,
-        COUNT(*) as count
-      FROM transactions
-      ${whereClause}${whereClause ? ' AND' : ' WHERE'} transaction_date IS NOT NULL AND transaction_date != '-'
-      GROUP BY year
-      ORDER BY year
-    `;
-    const yearlyData = db.prepare(yearlyQuery).all(...params);
+    const yearlyCounts = new Map();
+    for (const row of monthlyData) {
+      const year = row.period.substring(0, 4);
+      yearlyCounts.set(year, (yearlyCounts.get(year) || 0) + row.count);
+    }
+    const yearlyData = [...yearlyCounts.entries()].map(([year, count]) => ({ year, count }));
     let yearlyGrowth = 0;
     if (yearlyData.length >= 2) {
       const lastYear = yearlyData[yearlyData.length - 1].count;
@@ -962,24 +983,13 @@ app.get('/api/datasets/:id/agents/:regNum', (req, res) => {
     const topTowns = db.prepare(topTownsQuery).all(regNum);
 
     // Monthly activity time series
-    const monthConversion = `
-      CASE substr(transaction_date, 1, 3)
-        WHEN 'JAN' THEN '01' WHEN 'FEB' THEN '02' WHEN 'MAR' THEN '03'
-        WHEN 'APR' THEN '04' WHEN 'MAY' THEN '05' WHEN 'JUN' THEN '06'
-        WHEN 'JUL' THEN '07' WHEN 'AUG' THEN '08' WHEN 'SEP' THEN '09'
-        WHEN 'OCT' THEN '10' WHEN 'NOV' THEN '11' WHEN 'DEC' THEN '12'
-      END
-    `;
     const monthlyActivityQuery = `
-      SELECT
-        substr(transaction_date, -4) || '-' || ${monthConversion} as period,
-        COUNT(*) as count
+      SELECT period_month as period, COUNT(*) as count
       FROM transactions
       WHERE salesperson_reg_num = ?
-        AND transaction_date IS NOT NULL
-        AND transaction_date != '-'
-      GROUP BY period
-      ORDER BY period
+        AND period_month IS NOT NULL
+      GROUP BY period_month
+      ORDER BY period_month
     `;
     const monthlyActivity = db.prepare(monthlyActivityQuery).all(regNum);
 
@@ -1013,10 +1023,54 @@ if (existsSync(frontendDistPath)) {
   });
 }
 
+export const WARMUP_PATHS = [
+  '/api/datasets',
+  '/api/datasets/cea-property-transactions/insights',
+  '/api/datasets/cea-property-transactions/timeseries?period=month',
+  '/api/datasets/cea-property-transactions/agents/top?limit=50'
+];
+
+async function warmResponseCache() {
+  const startedAt = Date.now();
+  for (const path of WARMUP_PATHS) {
+    try {
+      await fetch(`http://127.0.0.1:${PORT}${path}`);
+    } catch (error) {
+      console.warn(`Cache warmup failed for ${path}:`, error.message);
+    }
+  }
+  console.log(`Response cache warmed in ${Date.now() - startedAt}ms`);
+}
+
+function loadPrecomputedResponses() {
+  if (!existsSync(PRECOMPUTED_RESPONSES_PATH)) {
+    return false;
+  }
+  try {
+    const precomputed = JSON.parse(readFileSync(PRECOMPUTED_RESPONSES_PATH, 'utf-8'));
+    for (const [path, body] of Object.entries(precomputed)) {
+      responseCache.set(path, body);
+    }
+    console.log(`Loaded ${responseCache.size} precomputed responses`);
+    return true;
+  } catch (error) {
+    console.warn('Failed to load precomputed responses:', error.message);
+    return false;
+  }
+}
+
+export { app };
+
 // Start server
-app.listen(PORT, '0.0.0.0', () => {
-  console.log(`API server running on http://0.0.0.0:${PORT}`);
-  console.log(`Health check: http://localhost:${PORT}/health`);
-  console.log(`Datasets: http://localhost:${PORT}/api/datasets`);
-  console.log('Using SQLite database for efficient queries');
-});
+if (import.meta.url === `file://${process.argv[1]}`) {
+  const hasPrecomputedResponses = loadPrecomputedResponses();
+  app.listen(PORT, '0.0.0.0', () => {
+    console.log(`API server running on http://0.0.0.0:${PORT}`);
+    console.log(`Health check: http://localhost:${PORT}/health`);
+    console.log(`Datasets: http://localhost:${PORT}/api/datasets`);
+    console.log('Using SQLite database for efficient queries');
+    if (!hasPrecomputedResponses) {
+      warmResponseCache();
+    }
+  });
+}

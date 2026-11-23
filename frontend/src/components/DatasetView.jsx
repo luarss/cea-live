@@ -3,37 +3,14 @@ import { format } from 'date-fns';
 import AnalyticsDashboard from './analytics/AnalyticsDashboard';
 import AgentInsights from './agents/AgentInsights';
 
-export default function DatasetView({ dataset, loading, error }) {
+export default function DatasetView({ dataset }) {
   const [activeTab, setActiveTab] = useState('analytics'); // Default to analytics
-
-  if (loading) {
-    return (
-      <div className="flex items-center justify-center h-full">
-        <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary-500 mx-auto mb-4"></div>
-          <p className="text-gray-600">Loading dataset...</p>
-        </div>
-      </div>
-    );
-  }
-
-  if (error) {
-    return (
-      <div className="flex items-center justify-center h-full">
-        <div className="text-center max-w-md">
-          <div className="text-red-500 text-5xl mb-4">⚠️</div>
-          <h2 className="text-xl font-semibold text-gray-800 mb-2">Failed to Load Dataset</h2>
-          <p className="text-gray-600">{error}</p>
-        </div>
-      </div>
-    );
-  }
 
   if (!dataset) {
     return null;
   }
 
-  const { metadata, schema } = dataset;
+  const { metadata } = dataset;
   const lastUpdated = metadata.lastUpdated
     ? format(new Date(metadata.lastUpdated), 'MMM d, yyyy HH:mm')
     : 'Unknown';

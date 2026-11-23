@@ -1,12 +1,12 @@
 import React, { useState } from 'react';
 import Layout from './components/layout/Layout';
 import DatasetView from './components/DatasetView';
-import { useCatalog, useDataLoader } from './hooks/useDataLoader';
+import { useCatalog } from './hooks/useDataLoader';
 
 function App() {
   const { catalog, loading: catalogLoading, error: catalogError } = useCatalog();
   const [selectedDatasetId, setSelectedDatasetId] = useState(null);
-  const { data: dataset, loading: datasetLoading, error: datasetError } = useDataLoader(selectedDatasetId);
+  const dataset = catalog?.datasets.find(entry => entry.id === selectedDatasetId) || null;
 
   // Auto-select first dataset
   React.useEffect(() => {
@@ -51,11 +51,7 @@ function App() {
       onDatasetSelect={setSelectedDatasetId}
     >
       {selectedDatasetId ? (
-        <DatasetView
-          dataset={dataset}
-          loading={datasetLoading}
-          error={datasetError}
-        />
+        <DatasetView dataset={dataset} />
       ) : (
         <div className="flex items-center justify-center h-full">
           <div className="text-center">

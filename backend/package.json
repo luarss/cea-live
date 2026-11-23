@@ -5,7 +5,7 @@
   "type": "module",
   "scripts": {
     "server": "node src/server.js",
-    "build": "node src/main.js",
+    "build": "node src/main.js && node src/precompute.js",
     "download": "node src/main.js download",
     "test": "node --test tests/*.test.js"
   },
